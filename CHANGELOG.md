@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-01-03
+
+### Added
+- PR submenu on hover with description and actions
+- Markdown-to-plain-text rendering for PR descriptions
+- "Go to GitHub" action to open PR in browser (for merging, etc.)
+- "Open in Neovim" action in submenu (same as click)
+- Check status details in submenu
+- Text wrapping for long descriptions (max 60 chars width, 15 lines)
+- Auto-refresh PR list every 15 minutes to detect closed/changed PRs
+- Colorblind-friendly diff highlighting: blue for added, orange for deleted
+- Deleted lines shown as virtual text with orange background above insertion point
+- Sign column markers: "+" (blue) for additions, "-" (orange) for deletions
+- Colors compatible with gruvbox theme
+
+### Changed
+- PR menu items now show submenu on hover instead of direct click
+- Description stripped of markdown syntax for cleaner display
+- Diff highlighting now uses custom `PRReviewAdd`/`PRReviewDelete` highlight groups
+- Colors persist across colorscheme changes
+- PR description now in scrollable view (max 300px height) with proper text color
+
 ## [1.2.0] - 2026-01-03
 
 ### Added

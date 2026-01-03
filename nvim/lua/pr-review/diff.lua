@@ -59,8 +59,9 @@ function M.parse_patch(patch)
         table.insert(current_hunk.changes, { type = "add", line_num = line_num })
       elseif line:match("^%-") and not line:match("^%-%-%-") then
         -- Removed line (doesn't increment line number in new file)
-        table.insert(current_hunk.lines, { type = "del", content = line:sub(2), line_num = nil })
-        table.insert(current_hunk.changes, { type = "del", line_num = line_num })
+        -- Store the content for virtual text display
+        table.insert(current_hunk.lines, { type = "del", content = line:sub(2), line_num = line_num })
+        table.insert(current_hunk.changes, { type = "del", line_num = line_num, content = line:sub(2) })
       elseif line:match("^%s") or line == "" then
         -- Context line
         line_num = line_num + 1
@@ -78,7 +79,7 @@ end
 
 --- Get all changed line numbers from a patch
 ---@param patch string The patch content
----@return table changes { added = {line_nums}, deleted = {line_nums} }
+---@return table changes { added = {line_nums}, deleted = {{line_num, content}} }
 function M.get_changed_lines(patch)
   local hunks = M.parse_patch(patch)
   local changes = { added = {}, deleted = {} }
@@ -88,8 +89,8 @@ function M.get_changed_lines(patch)
       if change.type == "add" and change.line_num then
         table.insert(changes.added, change.line_num)
       elseif change.type == "del" then
-        -- For deleted lines, we track the line after which they were deleted
-        table.insert(changes.deleted, change.line_num)
+        -- For deleted lines, we track the line after which they were deleted + content
+        table.insert(changes.deleted, { line_num = change.line_num, content = change.content })
       end
     end
   end
@@ -113,21 +114,56 @@ function M.apply_highlights(buf, patch)
   end
 
   local changes = M.get_changed_lines(patch)
+  local line_count = vim.api.nvim_buf_line_count(buf)
 
-  -- Apply DiffAdd highlight to added lines
+  -- Apply green highlight to added lines
   for _, line_num in ipairs(changes.added) do
     local line_idx = line_num - 1
-    pcall(vim.api.nvim_buf_add_highlight, buf, ns_id, "DiffAdd", line_idx, 0, -1)
+    if line_idx >= 0 and line_idx < line_count then
+      -- Full line highlight with green background
+      pcall(vim.api.nvim_buf_add_highlight, buf, ns_id, "PRReviewAdd", line_idx, 0, -1)
+      -- Green "+" sign in gutter
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns_id, line_idx, 0, {
+        sign_text = "+",
+        sign_hl_group = "PRReviewAddSign",
+      })
+    end
   end
 
-  -- For deleted lines, we show a sign or virtual text
-  -- Since the line doesn't exist in the file, we mark the previous line
-  for _, line_num in ipairs(changes.deleted) do
-    local line_idx = line_num -- Line after which deletion occurred
+  -- For deleted lines, show virtual text with red background
+  -- Group consecutive deletions together
+  local grouped_deletions = {}
+  for _, del in ipairs(changes.deleted) do
+    local line_idx = del.line_num
     if line_idx >= 0 then
-      pcall(vim.api.nvim_buf_set_extmark, buf, ns_id, line_idx, 0, {
+      if not grouped_deletions[line_idx] then
+        grouped_deletions[line_idx] = {}
+      end
+      table.insert(grouped_deletions[line_idx], del.content or "")
+    end
+  end
+
+  -- Display grouped deleted lines as virtual text
+  for line_idx, contents in pairs(grouped_deletions) do
+    -- Ensure line_idx is within buffer bounds
+    local target_line = math.min(line_idx, line_count - 1)
+    if target_line >= 0 then
+      -- Create virtual lines for deleted content
+      local virt_lines = {}
+      for _, content in ipairs(contents) do
+        local display_content = "- " .. (content or "")
+        -- Truncate if too long
+        if #display_content > 120 then
+          display_content = display_content:sub(1, 117) .. "..."
+        end
+        table.insert(virt_lines, { { display_content, "PRReviewDelete" } })
+      end
+
+      pcall(vim.api.nvim_buf_set_extmark, buf, ns_id, target_line, 0, {
+        virt_lines = virt_lines,
+        virt_lines_above = true,
         sign_text = "-",
-        sign_hl_group = "DiffDelete",
+        sign_hl_group = "PRReviewDeleteSign",
       })
     end
   end
@@ -298,8 +334,10 @@ local function get_current_file_diff_hunks()
   for _, line in ipairs(changes.added) do
     table.insert(lines, line)
   end
-  for _, line in ipairs(changes.deleted) do
-    table.insert(lines, line)
+  for _, del in ipairs(changes.deleted) do
+    if del.line_num then
+      table.insert(lines, del.line_num)
+    end
   end
 
   -- Sort and deduplicate

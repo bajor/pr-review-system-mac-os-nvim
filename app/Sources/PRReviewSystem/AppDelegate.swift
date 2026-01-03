@@ -32,8 +32,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Timer for polling pending check statuses
     private var checkStatusTimer: Timer?
 
+    /// Timer for auto-refreshing PR list
+    private var autoRefreshTimer: Timer?
+
     /// Interval for polling pending checks (30 seconds)
     private let checkStatusPollInterval: TimeInterval = 30
+
+    /// Interval for auto-refreshing PRs (15 minutes)
+    private let autoRefreshInterval: TimeInterval = 15 * 60
 
     // MARK: - Application Lifecycle
 
@@ -59,8 +65,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // Run cleanup if needed
         runCleanupIfNeeded()
 
-        // Start polling
+        // Start polling for change notifications
         startPolling()
+
+        // Start auto-refresh timer (every 15 minutes)
+        startAutoRefresh()
 
         // Initial refresh
         Task {
@@ -69,10 +78,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
-        // Stop polling
+        // Stop polling and timers
         poller?.stopPolling()
         checkStatusTimer?.invalidate()
         checkStatusTimer = nil
+        autoRefreshTimer?.invalidate()
+        autoRefreshTimer = nil
     }
 
     // MARK: - Configuration
@@ -127,6 +138,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         poller = PRPoller(api: api, config: config)
         poller?.startPolling { [weak self] changes in
             self?.handlePRChanges(changes)
+        }
+    }
+
+    private func startAutoRefresh() {
+        // Refresh PR list every 15 minutes to detect closed/changed PRs
+        autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: autoRefreshInterval, repeats: true) { [weak self] _ in
+            Task {
+                await self?.refreshPullRequests()
+            }
         }
     }
 

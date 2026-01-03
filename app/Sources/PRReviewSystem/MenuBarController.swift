@@ -188,24 +188,218 @@ public final class MenuBarController: NSObject {
         ]
         fullText.append(NSAttributedString(string: commitText, attributes: commitAttrs))
 
-        let item = NSMenuItem(title: "", action: #selector(prClicked(_:)), keyEquivalent: "")
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         item.attributedTitle = fullText
-        item.target = self
-        item.representedObject = pr
 
-        // Build tooltip with check status details
-        var tooltip = "\(pr.title)\n\nLast commit: \(prInfo.lastCommitMessage ?? "Unknown")"
+        // Create submenu with PR description and actions
+        let submenu = NSMenu()
+
+        // PR description in a scrollable view
+        let description = pr.body ?? "No description provided."
+        let cleanDescription = markdownToPlainText(description)
+
+        // Create scrollable description view
+        let descMenuItem = NSMenuItem()
+        let descView = createScrollableDescriptionView(text: cleanDescription)
+        descMenuItem.view = descView
+        submenu.addItem(descMenuItem)
+
+        submenu.addItem(NSMenuItem.separator())
+
+        // Check status info if available
         if let status = prInfo.checkStatus, status.totalCount > 0 {
-            tooltip += "\n\nChecks: \(status.passedCount)/\(status.totalCount) passed"
+            let statusText = "Checks: \(status.passedCount)/\(status.totalCount) passed"
+            let statusItem = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
+            statusItem.isEnabled = false
+            var statusStr = statusText
             if status.failedCount > 0 {
-                tooltip += ", \(status.failedCount) failed"
+                statusStr += ", \(status.failedCount) failed"
             }
             if status.pendingCount > 0 {
-                tooltip += ", \(status.pendingCount) pending"
+                statusStr += ", \(status.pendingCount) pending"
+            }
+            let statusAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.secondaryLabelColor
+            ]
+            statusItem.attributedTitle = NSAttributedString(string: statusStr, attributes: statusAttrs)
+            submenu.addItem(statusItem)
+            submenu.addItem(NSMenuItem.separator())
+        }
+
+        // Open in Neovim action
+        let openItem = NSMenuItem(title: "Open in Neovim", action: #selector(prClicked(_:)), keyEquivalent: "")
+        openItem.target = self
+        openItem.representedObject = pr
+        submenu.addItem(openItem)
+
+        // Go to GitHub action
+        let githubItem = NSMenuItem(title: "Go to GitHub", action: #selector(openInGitHub(_:)), keyEquivalent: "")
+        githubItem.target = self
+        githubItem.representedObject = pr.htmlUrl
+        submenu.addItem(githubItem)
+
+        item.submenu = submenu
+        return item
+    }
+
+    /// Convert basic markdown to plain text
+    private func markdownToPlainText(_ markdown: String) -> String {
+        var text = markdown
+
+        // Remove code blocks
+        text = text.replacingOccurrences(of: "```[\\s\\S]*?```", with: "[code block]", options: .regularExpression)
+        text = text.replacingOccurrences(of: "`([^`]+)`", with: "$1", options: .regularExpression)
+
+        // Remove headers (keep text)
+        text = text.replacingOccurrences(of: "^#{1,6}\\s*", with: "", options: .regularExpression)
+
+        // Remove bold/italic markers
+        text = text.replacingOccurrences(of: "\\*\\*([^*]+)\\*\\*", with: "$1", options: .regularExpression)
+        text = text.replacingOccurrences(of: "__([^_]+)__", with: "$1", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\\*([^*]+)\\*", with: "$1", options: .regularExpression)
+        text = text.replacingOccurrences(of: "_([^_]+)_", with: "$1", options: .regularExpression)
+
+        // Convert links [text](url) to just text
+        text = text.replacingOccurrences(of: "\\[([^\\]]+)\\]\\([^)]+\\)", with: "$1", options: .regularExpression)
+
+        // Remove image syntax
+        text = text.replacingOccurrences(of: "!\\[([^\\]]*)\\]\\([^)]+\\)", with: "[image: $1]", options: .regularExpression)
+
+        // Convert bullet points
+        text = text.replacingOccurrences(of: "^[\\*\\-\\+]\\s+", with: "• ", options: .regularExpression)
+
+        // Convert numbered lists
+        text = text.replacingOccurrences(of: "^\\d+\\.\\s+", with: "• ", options: .regularExpression)
+
+        // Remove horizontal rules
+        text = text.replacingOccurrences(of: "^[\\-\\*_]{3,}$", with: "───", options: .regularExpression)
+
+        // Clean up multiple newlines
+        text = text.replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+
+        // Trim whitespace
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return text
+    }
+
+    /// Wrap text to fit within a certain width, returning lines
+    private func wrapText(_ text: String, maxWidth: Int, maxLines: Int) -> [String] {
+        var lines: [String] = []
+        let paragraphs = text.components(separatedBy: "\n")
+
+        for paragraph in paragraphs {
+            if paragraph.isEmpty {
+                if !lines.isEmpty && lines.last != "" {
+                    lines.append("")
+                }
+                continue
+            }
+
+            let words = paragraph.split(separator: " ", omittingEmptySubsequences: false)
+            var currentLine = ""
+
+            for word in words {
+                let wordStr = String(word)
+                if currentLine.isEmpty {
+                    currentLine = wordStr
+                } else if currentLine.count + 1 + wordStr.count <= maxWidth {
+                    currentLine += " " + wordStr
+                } else {
+                    lines.append(currentLine)
+                    currentLine = wordStr
+                    if lines.count >= maxLines - 1 {
+                        break
+                    }
+                }
+            }
+
+            if !currentLine.isEmpty {
+                lines.append(currentLine)
+            }
+
+            if lines.count >= maxLines {
+                break
             }
         }
-        item.toolTip = tooltip
-        return item
+
+        // Truncate if needed
+        if lines.count >= maxLines {
+            lines = Array(lines.prefix(maxLines - 1))
+            lines.append("...")
+        }
+
+        // Remove trailing empty lines
+        while lines.last == "" {
+            lines.removeLast()
+        }
+
+        return lines.isEmpty ? ["No description provided."] : lines
+    }
+
+    @objc private func openInGitHub(_ sender: NSMenuItem) {
+        guard let urlString = sender.representedObject as? String,
+              let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Create a scrollable view for PR description
+    private func createScrollableDescriptionView(text: String) -> NSView {
+        let maxWidth: CGFloat = 400
+        let maxHeight: CGFloat = 300
+        let padding: CGFloat = 10
+
+        // Create scroll view first with fixed frame
+        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: maxWidth, height: maxHeight))
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+
+        // Create text view with proper configuration
+        let contentSize = scrollView.contentSize
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: contentSize.width, height: contentSize.height))
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.textContainerInset = NSSize(width: padding, height: padding)
+        textView.autoresizingMask = [.width]
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.containerSize = NSSize(width: contentSize.width - padding * 2, height: CGFloat.greatestFiniteMagnitude)
+        textView.textContainer?.widthTracksTextView = true
+
+        // Build attributed string with header and description
+        let fullText = NSMutableAttributedString()
+
+        // Header "Description"
+        let headerAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.boldSystemFont(ofSize: 11),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.6)
+        ]
+        fullText.append(NSAttributedString(string: "Description\n\n", attributes: headerAttrs))
+
+        // Description body - explicitly white for dark menu
+        let bodyAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13),
+            .foregroundColor: NSColor.white
+        ]
+        fullText.append(NSAttributedString(string: text, attributes: bodyAttrs))
+
+        textView.textStorage?.setAttributedString(fullText)
+
+        // Calculate actual content height
+        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+        let usedHeight = textView.layoutManager?.usedRect(for: textView.textContainer!).height ?? 100
+        let finalHeight = min(usedHeight + padding * 3, maxHeight)
+
+        // Update frames
+        scrollView.frame = NSRect(x: 0, y: 0, width: maxWidth, height: finalHeight)
+        scrollView.documentView = textView
+
+        return scrollView
     }
 
     /// Truncate a string to a maximum length
