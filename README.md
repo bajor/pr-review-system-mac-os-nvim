@@ -116,6 +116,7 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 | `:PRReview comments` | Show all comments in current PR |
 | `:PRReview submit` | Submit review (approve/request changes/comment) |
 | `:PRReview close` | Exit review mode |
+| `:PRReview config` | Open config file for editing |
 
 ### PR List Window
 
