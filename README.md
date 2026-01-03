@@ -33,15 +33,18 @@ A complete PR code review system for GitHub, consisting of:
 ### macOS App
 
 ```bash
-# Build the app
-make build-app
+# Build and install to /Applications
+make install-app
 
-# Install to ~/.local/bin (recommended)
-cp app/.build/release/PRReviewSystem ~/.local/bin/
-chmod +x ~/.local/bin/PRReviewSystem
+# Or manually:
+make build-app
+cp -r app/.build/PRReview.app /Applications/
 
 # Run it
-~/.local/bin/PRReviewSystem
+open /Applications/PRReview.app
+
+# Uninstall
+make uninstall-app
 ```
 
 ## Configuration
@@ -105,7 +108,7 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 - **Refresh** - Manually refresh PR list
 - **Quit** - Exit the app
 
-**Note:** When running as a standalone executable (not a `.app` bundle), system notifications are disabled but custom sound notifications still work.
+**Note:** The app runs as a proper `.app` bundle from `/Applications`, enabling full system notification support.
 
 ### Neovim Commands
 
