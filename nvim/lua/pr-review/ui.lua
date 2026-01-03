@@ -1,0 +1,432 @@
+---@class PRReviewUI
+---UI components for PR Review plugin
+local M = {}
+
+local api = require("pr-review.api")
+local config = require("pr-review.config")
+
+--- Current floating window state
+M.state = {
+  win = nil,
+  buf = nil,
+  prs = {},
+  selected = 1,
+}
+
+--- Create a centered floating window
+---@param opts table Options: width, height, title, border, width_pct, height_pct
+---@return number win_id, number buf_id
+function M.create_floating_window(opts)
+  opts = opts or {}
+
+  -- Calculate size (use percentage if provided, otherwise fixed values)
+  local ui_width = vim.o.columns
+  local ui_height = vim.o.lines
+  local width = opts.width_pct and math.floor(ui_width * opts.width_pct) or (opts.width or 60)
+  local height = opts.height_pct and math.floor(ui_height * opts.height_pct) or (opts.height or 20)
+  local title = opts.title or ""
+
+  -- Calculate position (centered)
+  local col = math.floor((ui_width - width) / 2)
+  local row = math.floor((ui_height - height) / 2)
+
+  -- Create buffer
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].swapfile = false
+
+  -- Window options
+  local win_opts = {
+    relative = "editor",
+    width = width,
+    height = height,
+    col = col,
+    row = row,
+    style = "minimal",
+    border = opts.border or "rounded",
+  }
+
+  -- Only add title options if title is provided
+  if title ~= "" then
+    win_opts.title = " " .. title .. " "
+    win_opts.title_pos = "center"
+  end
+
+  -- Create window
+  local win = vim.api.nvim_open_win(buf, true, win_opts)
+
+  -- Set window options
+  vim.wo[win].cursorline = true
+  vim.wo[win].wrap = false
+
+  return win, buf
+end
+
+--- Close the PR list window
+function M.close_pr_list()
+  if M.state.win and vim.api.nvim_win_is_valid(M.state.win) then
+    vim.api.nvim_win_close(M.state.win, true)
+  end
+  M.state.win = nil
+  M.state.buf = nil
+end
+
+--- Calculate relative time string
+---@param iso_date string ISO 8601 date string
+---@return string
+local function relative_time(iso_date)
+  if not iso_date then
+    return ""
+  end
+  -- Parse ISO date (e.g., "2026-01-03T12:34:56Z")
+  local year, month, day, hour, min, sec = iso_date:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)")
+  if not year then
+    return ""
+  end
+
+  local pr_time = os.time({
+    year = tonumber(year),
+    month = tonumber(month),
+    day = tonumber(day),
+    hour = tonumber(hour),
+    min = tonumber(min),
+    sec = tonumber(sec),
+  })
+
+  local now = os.time()
+  local diff = now - pr_time
+
+  if diff < 60 then
+    return "just now"
+  elseif diff < 3600 then
+    local mins = math.floor(diff / 60)
+    return mins == 1 and "1 min ago" or mins .. " mins ago"
+  elseif diff < 86400 then
+    local hours = math.floor(diff / 3600)
+    return hours == 1 and "1 hour ago" or hours .. " hours ago"
+  else
+    local days = math.floor(diff / 86400)
+    return days == 1 and "1 day ago" or days .. " days ago"
+  end
+end
+
+--- Render the PR list in the buffer
+---@param prs table[] List of PRs
+---@param buf_width number Buffer width for formatting
+local function render_pr_list(prs, buf_width)
+  local lines = {}
+  local highlights = {}
+  buf_width = buf_width or 60
+
+  if #prs == 0 then
+    table.insert(lines, "")
+    table.insert(lines, "  No open pull requests found")
+    table.insert(lines, "")
+    table.insert(lines, "  Press 'r' to refresh, 'q' to close")
+  else
+    -- Group by repo (preserve order with array)
+    local by_repo = {}
+    local repo_order = {}
+    for _, pr in ipairs(prs) do
+      local repo = pr.base.repo and pr.base.repo.full_name or "unknown"
+      if not by_repo[repo] then
+        by_repo[repo] = {}
+        table.insert(repo_order, repo)
+      end
+      table.insert(by_repo[repo], pr)
+    end
+
+    local line_idx = 0
+    for i, repo in ipairs(repo_order) do
+      local repo_prs = by_repo[repo]
+
+      -- Separator line before each repo (except first)
+      if i > 1 then
+        table.insert(lines, string.rep("─", buf_width - 4))
+        line_idx = line_idx + 1
+      end
+
+      -- Repo header
+      table.insert(lines, " " .. repo)
+      table.insert(highlights, { line = line_idx, col = 0, end_col = #repo + 2, hl = "Title" })
+      line_idx = line_idx + 1
+
+      -- Empty line after header
+      table.insert(lines, "")
+      line_idx = line_idx + 1
+
+      for _, pr in ipairs(repo_prs) do
+        -- PR number and full title (bold)
+        local title_line = string.format("  #%d  %s", pr.number, pr.title)
+        table.insert(lines, title_line)
+        table.insert(highlights, { line = line_idx, col = 0, end_col = #title_line, hl = "Bold" })
+        line_idx = line_idx + 1
+
+        -- Info line: author and relative time (not bold)
+        local author = pr.user and pr.user.login or "unknown"
+        local updated = relative_time(pr.updated_at)
+        local info_line = string.format("       by %s • %s", author, updated)
+        table.insert(lines, info_line)
+        line_idx = line_idx + 1
+
+        -- Empty line between PRs
+        table.insert(lines, "")
+        line_idx = line_idx + 1
+      end
+    end
+  end
+
+  -- Footer separator
+  table.insert(lines, string.rep("─", buf_width - 4))
+  table.insert(lines, " Enter: open │ q: close │ r: refresh │ j/k: navigate")
+
+  return lines, highlights
+end
+
+--- Update the selection highlight
+local function update_selection()
+  if not M.state.buf or not vim.api.nvim_buf_is_valid(M.state.buf) then
+    return
+  end
+
+  -- Clear existing selection namespace
+  local ns = vim.api.nvim_create_namespace("pr_review_selection")
+  vim.api.nvim_buf_clear_namespace(M.state.buf, ns, 0, -1)
+
+  -- Find the line for the selected PR
+  -- New layout: separator (if not first repo) + repo header + empty + (title + info + empty) per PR
+  local line_idx = 0
+  local selected_line = nil
+
+  local by_repo = {}
+  local repo_order = {}
+  for _, pr in ipairs(M.state.prs) do
+    local repo = pr.base.repo and pr.base.repo.full_name or "unknown"
+    if not by_repo[repo] then
+      by_repo[repo] = {}
+      table.insert(repo_order, repo)
+    end
+    table.insert(by_repo[repo], pr)
+  end
+
+  local pr_idx = 0
+  for i, repo in ipairs(repo_order) do
+    local repo_prs = by_repo[repo]
+    -- Separator line (if not first repo)
+    if i > 1 then
+      line_idx = line_idx + 1
+    end
+    line_idx = line_idx + 1 -- Repo header
+    line_idx = line_idx + 1 -- Empty line after header
+
+    for _ in ipairs(repo_prs) do
+      pr_idx = pr_idx + 1
+      if pr_idx == M.state.selected then
+        selected_line = line_idx
+      end
+      line_idx = line_idx + 3 -- title + info + empty line
+    end
+  end
+
+  -- Set cursor to selected line (the title line of the PR)
+  if selected_line and M.state.win and vim.api.nvim_win_is_valid(M.state.win) then
+    vim.api.nvim_win_set_cursor(M.state.win, { selected_line + 1, 0 })
+  end
+end
+
+--- Get the currently selected PR
+---@return table|nil pr
+local function get_selected_pr()
+  if M.state.selected > 0 and M.state.selected <= #M.state.prs then
+    return M.state.prs[M.state.selected]
+  end
+  return nil
+end
+
+--- Set up keybindings for the PR list
+local function setup_keymaps()
+  local buf = M.state.buf
+  if not buf then
+    return
+  end
+
+  local opts = { buffer = buf, noremap = true, silent = true }
+
+  -- Navigation
+  vim.keymap.set("n", "j", function()
+    if M.state.selected < #M.state.prs then
+      M.state.selected = M.state.selected + 1
+      update_selection()
+    end
+  end, opts)
+
+  vim.keymap.set("n", "k", function()
+    if M.state.selected > 1 then
+      M.state.selected = M.state.selected - 1
+      update_selection()
+    end
+  end, opts)
+
+  -- Open selected PR
+  vim.keymap.set("n", "<CR>", function()
+    local pr = get_selected_pr()
+    if pr then
+      M.close_pr_list()
+      -- Trigger PR open (will be implemented in Phase 6)
+      vim.cmd("PRReview open " .. pr.html_url)
+    end
+  end, opts)
+
+  -- Close
+  vim.keymap.set("n", "q", function()
+    M.close_pr_list()
+  end, opts)
+
+  vim.keymap.set("n", "<Esc>", function()
+    M.close_pr_list()
+  end, opts)
+
+  -- Refresh
+  vim.keymap.set("n", "r", function()
+    M.refresh_pr_list()
+  end, opts)
+end
+
+--- Apply highlights to the buffer
+---@param buf number Buffer handle
+---@param highlights table[] List of highlight specs
+local function apply_highlights(buf, highlights)
+  local ns = vim.api.nvim_create_namespace("pr_review_highlights")
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+
+  for _, hl in ipairs(highlights) do
+    vim.api.nvim_buf_add_highlight(buf, ns, hl.hl, hl.line, hl.col, hl.end_col)
+  end
+end
+
+--- Refresh the PR list
+function M.refresh_pr_list()
+  if not M.state.buf or not vim.api.nvim_buf_is_valid(M.state.buf) then
+    return
+  end
+
+  -- Show loading message
+  vim.bo[M.state.buf].modifiable = true
+  vim.api.nvim_buf_set_lines(M.state.buf, 0, -1, false, { "  Loading..." })
+  vim.bo[M.state.buf].modifiable = false
+
+  M.fetch_all_prs(function(prs, err)
+    if err then
+      vim.bo[M.state.buf].modifiable = true
+      vim.api.nvim_buf_set_lines(M.state.buf, 0, -1, false, {
+        "  Error loading PRs:",
+        "  " .. err,
+        "",
+        "  Press 'r' to retry, 'q' to close",
+      })
+      vim.bo[M.state.buf].modifiable = false
+      return
+    end
+
+    M.state.prs = prs
+    M.state.selected = 1
+
+    -- Get window width for formatting
+    local win_width = 60
+    if M.state.win and vim.api.nvim_win_is_valid(M.state.win) then
+      win_width = vim.api.nvim_win_get_width(M.state.win)
+    end
+
+    local lines, highlights = render_pr_list(prs, win_width)
+    vim.bo[M.state.buf].modifiable = true
+    vim.api.nvim_buf_set_lines(M.state.buf, 0, -1, false, lines)
+    vim.bo[M.state.buf].modifiable = false
+
+    -- Apply highlights
+    apply_highlights(M.state.buf, highlights)
+
+    update_selection()
+  end)
+end
+
+--- Fetch all PRs from configured repos
+---@param callback fun(prs: table[]|nil, err: string|nil)
+function M.fetch_all_prs(callback)
+  local cfg, err = config.load()
+  if err then
+    callback(nil, err)
+    return
+  end
+
+  local all_prs = {}
+  local pending = #cfg.repos
+  local had_error = nil
+
+  if pending == 0 then
+    callback({}, nil)
+    return
+  end
+
+  for _, repo_str in ipairs(cfg.repos) do
+    local owner, repo = repo_str:match("^([^/]+)/(.+)$")
+    if owner and repo then
+      api.list_prs(owner, repo, cfg.github_token, function(prs, api_err)
+        pending = pending - 1
+
+        if api_err then
+          had_error = api_err
+        elseif prs then
+          for _, pr in ipairs(prs) do
+            table.insert(all_prs, pr)
+          end
+        end
+
+        if pending == 0 then
+          if had_error and #all_prs == 0 then
+            callback(nil, had_error)
+          else
+            callback(all_prs, nil)
+          end
+        end
+      end)
+    else
+      pending = pending - 1
+      if pending == 0 then
+        callback(all_prs, nil)
+      end
+    end
+  end
+end
+
+--- Open the PR list window
+function M.pr_list()
+  -- Close existing window if open
+  M.close_pr_list()
+
+  -- Create floating window (50% of screen)
+  local win, buf = M.create_floating_window({
+    width_pct = 0.5,
+    height_pct = 0.5,
+    title = "PR Review - Open Pull Requests",
+    border = "rounded",
+  })
+
+  M.state.win = win
+  M.state.buf = buf
+  M.state.prs = {}
+  M.state.selected = 1
+
+  -- Set initial content
+  vim.bo[buf].modifiable = true
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "  Loading..." })
+  vim.bo[buf].modifiable = false
+
+  -- Setup keymaps
+  setup_keymaps()
+
+  -- Fetch PRs
+  M.refresh_pr_list()
+end
+
+return M

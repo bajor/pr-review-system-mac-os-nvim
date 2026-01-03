@@ -1,0 +1,198 @@
+# PR Review System
+
+A complete PR code review system for GitHub, consisting of:
+
+1. **macOS menu bar app** - Polls GitHub for PRs, shows notifications, launches review sessions
+2. **Neovim plugin** - Full PR review experience with diff viewing, comments, and submissions
+
+## Requirements
+
+### Neovim Plugin
+- Neovim 0.9+
+- [plenary.nvim](https://github.com/nvim-lua/plenary.nvim)
+
+### macOS App
+- macOS 14.0+ (Sonoma)
+- Command Line Tools (`xcode-select --install`)
+- [Ghostty](https://ghostty.org) terminal
+
+## Installation
+
+### Neovim Plugin (lazy.nvim)
+
+```lua
+{
+  dir = "~/path/to/pr-review-system/nvim",
+  dependencies = { "nvim-lua/plenary.nvim" },
+  config = function()
+    require("pr-review").setup({})
+  end
+}
+```
+
+### macOS App
+
+```bash
+# Build the app
+make build-app
+
+# Install to ~/.local/bin (recommended)
+cp app/.build/release/PRReviewSystem ~/.local/bin/
+chmod +x ~/.local/bin/PRReviewSystem
+
+# Run it
+~/.local/bin/PRReviewSystem
+```
+
+## Configuration
+
+Create `~/.config/pr-review/config.json`:
+
+```json
+{
+  "github_token": "ghp_xxxxxxxxxxxxxxxxxxxx",
+  "github_username": "your-username",
+  "repos": [
+    "owner/repo1",
+    "owner/repo2"
+  ],
+  "clone_root": "~/.local/share/pr-review/repos",
+  "poll_interval_seconds": 300,
+  "ghostty_path": "/Applications/Ghostty.app",
+  "nvim_path": "/opt/homebrew/bin/nvim",
+  "notifications": {
+    "new_commits": true,
+    "new_comments": true,
+    "sound": true,
+    "sound_path": "~/Music/pr-notification.mp3"
+  }
+}
+```
+
+### Notification Sound
+
+You can set a custom notification sound in two ways:
+
+1. **Config file**: Set `notifications.sound_path` to your audio file (mp3/wav/aiff)
+2. **Environment variable**: Set `PR_REVIEW_SOUND_PATH` (takes precedence over config)
+
+### Auto-Start on Login
+
+The app can be configured to start automatically on login. A LaunchAgent is created at:
+```
+~/Library/LaunchAgents/com.prreview.system.plist
+```
+
+To enable/disable:
+```bash
+# Enable
+launchctl load ~/Library/LaunchAgents/com.prreview.system.plist
+
+# Disable
+launchctl unload ~/Library/LaunchAgents/com.prreview.system.plist
+```
+
+## Usage
+
+### macOS Menu Bar App
+
+Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your menu bar.
+
+**Menu Bar Features:**
+- Shows all open PRs from configured repos
+- Displays PR title and last commit message
+- Click a PR to clone/update and open in Ghostty + Neovim
+- **Refresh** - Manually refresh PR list
+- **Quit** - Exit the app
+
+**Note:** When running as a standalone executable (not a `.app` bundle), system notifications are disabled but custom sound notifications still work.
+
+### Neovim Commands
+
+| Command | Description |
+|---------|-------------|
+| `:PRReview list` | Open floating window listing all PRs |
+| `:PRReview open {url}` | Clone/pull PR, enter review mode |
+| `:PRReview comments` | Show all comments in current PR |
+| `:PRReview submit` | Submit review (approve/request changes/comment) |
+| `:PRReview close` | Exit review mode |
+
+### PR List Window
+
+When viewing the PR list (`:PRReview list`):
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Navigate up/down |
+| `Enter` | Open selected PR |
+| `r` | Refresh list |
+| `q` / `Esc` | Close window |
+
+### Review Mode Keybindings
+
+> **Note:** `<leader>` is your Neovim leader key (default: `\`, commonly remapped to `<Space>`).
+
+**File Navigation:**
+
+| Key | Action |
+|-----|--------|
+| `]f` | Next file in PR |
+| `[f` | Previous file in PR |
+
+**Diff Navigation (within file):**
+
+| Key | Action |
+|-----|--------|
+| `<leader>nd` | Next diff change |
+| `<leader>pd` | Previous diff change |
+
+**Comments:**
+
+| Key | Action |
+|-----|--------|
+| `<leader>cc` | Create comment on current line |
+| `<leader>nc` | Jump to next comment |
+| `<leader>pc` | Jump to previous comment |
+| `<leader>lc` | Open comment list |
+| `<leader>rc` | Resolve/unresolve comment |
+
+When creating a comment:
+- `:w` - Save comment
+- `:q` - Cancel comment
+
+**Review Submission:**
+
+| Key | Action |
+|-----|--------|
+| `<leader>rs` | Submit review (opens dialog) |
+| `<leader>ra` | Quick approve |
+| `<leader>ri` | Show review info/status |
+
+**Exit:**
+
+| Key | Action |
+|-----|--------|
+| `q` | Close review mode |
+
+## Development
+
+```bash
+# Run all tests and linting
+make test
+
+# Run only Neovim tests
+make test-nvim
+
+# Run only Swift tests
+make test-app
+
+# Build the macOS app
+make build-app
+
+# Clean build artifacts
+make clean
+```
+
+## License
+
+MIT

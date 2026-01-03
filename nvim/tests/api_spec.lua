@@ -1,0 +1,90 @@
+local api = require("pr-review.api")
+
+describe("pr-review.api", function()
+  describe("module", function()
+    it("can be required", function()
+      assert.is_not_nil(api)
+    end)
+
+    it("has base_url", function()
+      assert.equals("https://api.github.com", api.base_url)
+    end)
+
+    it("has list_prs function", function()
+      assert.is_function(api.list_prs)
+    end)
+
+    it("has get_pr function", function()
+      assert.is_function(api.get_pr)
+    end)
+
+    it("has get_pr_files function", function()
+      assert.is_function(api.get_pr_files)
+    end)
+
+    it("has get_pr_comments function", function()
+      assert.is_function(api.get_pr_comments)
+    end)
+
+    it("has create_comment function", function()
+      assert.is_function(api.create_comment)
+    end)
+
+    it("has submit_review function", function()
+      assert.is_function(api.submit_review)
+    end)
+  end)
+
+  describe("parse_pr_url", function()
+    it("parses valid GitHub PR URL", function()
+      local owner, repo, number = api.parse_pr_url("https://github.com/owner/repo/pull/123")
+      assert.equals("owner", owner)
+      assert.equals("repo", repo)
+      assert.equals(123, number)
+    end)
+
+    it("parses URL with hyphens and underscores", function()
+      local owner, repo, number = api.parse_pr_url("https://github.com/my-org/my_repo/pull/456")
+      assert.equals("my-org", owner)
+      assert.equals("my_repo", repo)
+      assert.equals(456, number)
+    end)
+
+    it("parses URL with numbers in name", function()
+      local owner, repo, number = api.parse_pr_url("https://github.com/org123/repo456/pull/789")
+      assert.equals("org123", owner)
+      assert.equals("repo456", repo)
+      assert.equals(789, number)
+    end)
+
+    it("returns nil for invalid URL", function()
+      local owner, repo, number = api.parse_pr_url("https://example.com/not/a/pr")
+      assert.is_nil(owner)
+      assert.is_nil(repo)
+      assert.is_nil(number)
+    end)
+
+    it("returns nil for GitHub non-PR URL", function()
+      local owner, repo, number = api.parse_pr_url("https://github.com/owner/repo/issues/123")
+      assert.is_nil(owner)
+      assert.is_nil(repo)
+      assert.is_nil(number)
+    end)
+
+    it("returns nil for empty string", function()
+      local owner, repo, number = api.parse_pr_url("")
+      assert.is_nil(owner)
+      assert.is_nil(repo)
+      assert.is_nil(number)
+    end)
+
+    it("handles trailing slashes", function()
+      -- Our pattern is strict - no trailing content expected
+      local owner, repo, number = api.parse_pr_url("https://github.com/owner/repo/pull/123/files")
+      -- This should still extract the number since we match up to /pull/123
+      assert.equals("owner", owner)
+      assert.equals("repo", repo)
+      assert.equals(123, number)
+    end)
+  end)
+end)

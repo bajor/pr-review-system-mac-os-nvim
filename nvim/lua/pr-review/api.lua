@@ -1,0 +1,256 @@
+---@class PRReviewAPI
+---GitHub API client using plenary.curl
+local M = {}
+
+local curl = require("plenary.curl")
+
+--- Base URL for GitHub API
+M.base_url = "https://api.github.com"
+
+--- Default headers for API requests
+---@param token string GitHub token
+---@return table
+local function default_headers(token)
+  return {
+    ["Authorization"] = "Bearer " .. token,
+    ["Accept"] = "application/vnd.github+json",
+    ["X-GitHub-Api-Version"] = "2022-11-28",
+    ["User-Agent"] = "pr-review-nvim",
+  }
+end
+
+--- Parse Link header for pagination
+---@param link_header string|nil
+---@return string|nil next_url
+local function parse_link_header(link_header)
+  if not link_header then
+    return nil
+  end
+
+  -- Link header format: <url>; rel="next", <url>; rel="last"
+  for part in link_header:gmatch("[^,]+") do
+    local url = part:match("<([^>]+)>")
+    local rel = part:match('rel="([^"]+)"')
+    if url and rel == "next" then
+      return url
+    end
+  end
+
+  return nil
+end
+
+--- Make an API request
+---@param opts table Options: url, method, token, body, callback
+---@return table|nil response, string|nil error
+local function request(opts)
+  local headers = default_headers(opts.token)
+
+  if opts.body then
+    headers["Content-Type"] = "application/json"
+  end
+
+  local response = curl.request({
+    url = opts.url,
+    method = opts.method or "GET",
+    headers = headers,
+    body = opts.body and vim.json.encode(opts.body) or nil,
+    timeout = 30000,
+  })
+
+  if not response then
+    return nil, "Request failed: no response"
+  end
+
+  if response.status >= 400 then
+    local err_body = vim.json.decode(response.body or "{}") or {}
+    local message = err_body.message or "Unknown error"
+    return nil, string.format("GitHub API error (%d): %s", response.status, message)
+  end
+
+  local body = vim.json.decode(response.body or "[]")
+  return {
+    data = body,
+    headers = response.headers,
+    status = response.status,
+  }, nil
+end
+
+--- Fetch all pages of a paginated endpoint
+---@param url string Initial URL
+---@param token string GitHub token
+---@return table[] items, string|nil error
+local function fetch_all_pages(url, token)
+  local all_items = {}
+  local current_url = url
+
+  while current_url do
+    local response, err = request({
+      url = current_url,
+      method = "GET",
+      token = token,
+    })
+
+    if err then
+      return all_items, err
+    end
+
+    -- Append items from this page
+    if type(response.data) == "table" then
+      for _, item in ipairs(response.data) do
+        table.insert(all_items, item)
+      end
+    end
+
+    -- Get next page URL from Link header
+    current_url = parse_link_header(response.headers and response.headers.link)
+  end
+
+  return all_items, nil
+end
+
+--- List open pull requests for a repository
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param token string GitHub token
+---@param callback fun(prs: table[]|nil, err: string|nil)
+function M.list_prs(owner, repo, token, callback)
+  vim.schedule(function()
+    local url = string.format("%s/repos/%s/%s/pulls?state=open&per_page=100", M.base_url, owner, repo)
+    local prs, err = fetch_all_pages(url, token)
+    callback(prs, err)
+  end)
+end
+
+--- Get a single pull request
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param number number PR number
+---@param token string GitHub token
+---@param callback fun(pr: table|nil, err: string|nil)
+function M.get_pr(owner, repo, number, token, callback)
+  vim.schedule(function()
+    local url = string.format("%s/repos/%s/%s/pulls/%d", M.base_url, owner, repo, number)
+    local response, err = request({
+      url = url,
+      method = "GET",
+      token = token,
+    })
+
+    if err then
+      callback(nil, err)
+      return
+    end
+
+    callback(response.data, nil)
+  end)
+end
+
+--- Get files changed in a pull request
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param number number PR number
+---@param token string GitHub token
+---@param callback fun(files: table[]|nil, err: string|nil)
+function M.get_pr_files(owner, repo, number, token, callback)
+  vim.schedule(function()
+    local url = string.format("%s/repos/%s/%s/pulls/%d/files?per_page=100", M.base_url, owner, repo, number)
+    local files, err = fetch_all_pages(url, token)
+    callback(files, err)
+  end)
+end
+
+--- Get review comments on a pull request
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param number number PR number
+---@param token string GitHub token
+---@param callback fun(comments: table[]|nil, err: string|nil)
+function M.get_pr_comments(owner, repo, number, token, callback)
+  vim.schedule(function()
+    local url = string.format("%s/repos/%s/%s/pulls/%d/comments?per_page=100", M.base_url, owner, repo, number)
+    local comments, err = fetch_all_pages(url, token)
+    callback(comments, err)
+  end)
+end
+
+--- Create a review comment on a pull request
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param number number PR number
+---@param opts table Comment options: body, commit_id, path, line (or position for old API)
+---@param token string GitHub token
+---@param callback fun(comment: table|nil, err: string|nil)
+function M.create_comment(owner, repo, number, opts, token, callback)
+  vim.schedule(function()
+    local url = string.format("%s/repos/%s/%s/pulls/%d/comments", M.base_url, owner, repo, number)
+
+    local body = {
+      body = opts.body,
+      commit_id = opts.commit_id,
+      path = opts.path,
+      line = opts.line,
+      side = opts.side or "RIGHT", -- RIGHT for new code, LEFT for old code
+    }
+
+    local response, err = request({
+      url = url,
+      method = "POST",
+      token = token,
+      body = body,
+    })
+
+    if err then
+      callback(nil, err)
+      return
+    end
+
+    callback(response.data, nil)
+  end)
+end
+
+--- Submit a review on a pull request
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param number number PR number
+---@param event string Review event: APPROVE, REQUEST_CHANGES, COMMENT
+---@param body string|nil Optional review body
+---@param token string GitHub token
+---@param callback fun(review: table|nil, err: string|nil)
+function M.submit_review(owner, repo, number, event, body, token, callback)
+  vim.schedule(function()
+    local url = string.format("%s/repos/%s/%s/pulls/%d/reviews", M.base_url, owner, repo, number)
+
+    local request_body = {
+      event = event,
+      body = body or "",
+    }
+
+    local response, err = request({
+      url = url,
+      method = "POST",
+      token = token,
+      body = request_body,
+    })
+
+    if err then
+      callback(nil, err)
+      return
+    end
+
+    callback(response.data, nil)
+  end)
+end
+
+--- Parse a GitHub PR URL to extract owner, repo, and number
+---@param url string GitHub PR URL
+---@return string|nil owner, string|nil repo, number|nil number
+function M.parse_pr_url(url)
+  -- Match: https://github.com/owner/repo/pull/123
+  local owner, repo, num = url:match("github%.com/([^/]+)/([^/]+)/pull/(%d+)")
+  if owner and repo and num then
+    return owner, repo, tonumber(num)
+  end
+  return nil, nil, nil
+end
+
+return M
