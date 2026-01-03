@@ -76,6 +76,88 @@ public actor GitHubAPI {
         return commits.last
     }
 
+    /// Get CI check status for a commit (combines check runs and commit statuses)
+    func getCheckStatus(owner: String, repo: String, ref: String) async throws -> CheckStatus {
+        // Fetch both check runs (GitHub Actions) and commit statuses (external CI)
+        async let checkRunsTask = fetchCheckRuns(owner: owner, repo: repo, ref: ref)
+        async let statusTask = fetchCombinedStatus(owner: owner, repo: repo, ref: ref)
+
+        let (checkRuns, combinedStatus) = try await (checkRunsTask, statusTask)
+
+        // Combine results
+        var totalCount = 0
+        var passedCount = 0
+        var failedCount = 0
+        var pendingCount = 0
+
+        // Process check runs (GitHub Actions)
+        for run in checkRuns.checkRuns {
+            totalCount += 1
+            if run.status != "completed" {
+                pendingCount += 1
+            } else if let conclusion = run.conclusion {
+                switch conclusion {
+                case "success", "skipped":
+                    passedCount += 1
+                case "failure", "timed_out":
+                    failedCount += 1
+                case "cancelled":
+                    // Don't count cancelled as failed
+                    passedCount += 1
+                default:
+                    pendingCount += 1
+                }
+            }
+        }
+
+        // Process commit statuses (external CI like Travis, CircleCI)
+        for status in combinedStatus.statuses {
+            totalCount += 1
+            switch status.state {
+            case "success":
+                passedCount += 1
+            case "failure", "error":
+                failedCount += 1
+            case "pending":
+                pendingCount += 1
+            default:
+                pendingCount += 1
+            }
+        }
+
+        // Determine overall status
+        let status: CheckStatus.Status
+        if totalCount == 0 {
+            status = .unknown
+        } else if failedCount > 0 {
+            status = .failure
+        } else if pendingCount > 0 {
+            status = .pending
+        } else {
+            status = .success
+        }
+
+        return CheckStatus(
+            status: status,
+            totalCount: totalCount,
+            passedCount: passedCount,
+            failedCount: failedCount,
+            pendingCount: pendingCount
+        )
+    }
+
+    /// Fetch check runs for a commit
+    private func fetchCheckRuns(owner: String, repo: String, ref: String) async throws -> CheckRunsResponse {
+        let url = "\(Self.baseURL)/repos/\(owner)/\(repo)/commits/\(ref)/check-runs"
+        return try await fetch(url: url)
+    }
+
+    /// Fetch combined status for a commit
+    private func fetchCombinedStatus(owner: String, repo: String, ref: String) async throws -> CombinedStatusResponse {
+        let url = "\(Self.baseURL)/repos/\(owner)/\(repo)/commits/\(ref)/status"
+        return try await fetch(url: url)
+    }
+
     /// Create a review comment on a pull request
     func createComment(
         owner: String,

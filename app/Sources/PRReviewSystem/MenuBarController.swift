@@ -5,10 +5,14 @@ import Foundation
 public struct PRDisplayInfo {
     public let pr: PullRequest
     public var lastCommitMessage: String?
+    public var checkStatus: CheckStatus?
+    public var lastCheckedSHA: String?  // Track which SHA we last checked
 
-    public init(pr: PullRequest, lastCommitMessage: String? = nil) {
+    public init(pr: PullRequest, lastCommitMessage: String? = nil, checkStatus: CheckStatus? = nil) {
         self.pr = pr
         self.lastCommitMessage = lastCommitMessage
+        self.checkStatus = checkStatus
+        self.lastCheckedSHA = pr.head.sha
     }
 }
 
@@ -156,12 +160,16 @@ public final class MenuBarController: NSObject {
         menu = newMenu
     }
 
-    /// Create a menu item for a pull request with commit info
+    /// Create a menu item for a pull request with commit info and check status
     private func createPRMenuItem(prInfo: PRDisplayInfo) -> NSMenuItem {
         let pr = prInfo.pr
 
+        // Build check status string
+        let checkStatusStr = prInfo.checkStatus?.displayString ?? ""
+        let checkStatusSuffix = checkStatusStr.isEmpty ? "" : "  \(checkStatusStr)"
+
         // Build attributed title with PR title bold, commit message below in gray
-        let titleText = "  #\(pr.number): \(pr.title)\n"
+        let titleText = "  #\(pr.number): \(pr.title)\(checkStatusSuffix)\n"
         let commitText = "       \(prInfo.lastCommitMessage ?? "Loading...")"
 
         let fullText = NSMutableAttributedString()
@@ -184,7 +192,19 @@ public final class MenuBarController: NSObject {
         item.attributedTitle = fullText
         item.target = self
         item.representedObject = pr
-        item.toolTip = "\(pr.title)\n\nLast commit: \(prInfo.lastCommitMessage ?? "Unknown")"
+
+        // Build tooltip with check status details
+        var tooltip = "\(pr.title)\n\nLast commit: \(prInfo.lastCommitMessage ?? "Unknown")"
+        if let status = prInfo.checkStatus, status.totalCount > 0 {
+            tooltip += "\n\nChecks: \(status.passedCount)/\(status.totalCount) passed"
+            if status.failedCount > 0 {
+                tooltip += ", \(status.failedCount) failed"
+            }
+            if status.pendingCount > 0 {
+                tooltip += ", \(status.pendingCount) pending"
+            }
+        }
+        item.toolTip = tooltip
         return item
     }
 
@@ -244,6 +264,44 @@ public final class MenuBarController: NSObject {
             pullRequests[repo] = prInfos
             rebuildMenu()
         }
+    }
+
+    /// Update the check status for a specific PR
+    public func updateCheckStatus(forPR prNumber: Int, inRepo repo: String, status: CheckStatus, sha: String) {
+        guard var prInfos = pullRequests[repo] else { return }
+        if let index = prInfos.firstIndex(where: { $0.pr.number == prNumber }) {
+            prInfos[index].checkStatus = status
+            prInfos[index].lastCheckedSHA = sha
+            pullRequests[repo] = prInfos
+            rebuildMenu()
+        }
+    }
+
+    /// Get all PRs that have pending checks (need polling)
+    public func getPRsWithPendingChecks() -> [(repo: String, pr: PullRequest, sha: String)] {
+        var result: [(repo: String, pr: PullRequest, sha: String)] = []
+        for (repo, prInfos) in pullRequests {
+            for prInfo in prInfos {
+                if let status = prInfo.checkStatus, status.isRunning {
+                    result.append((repo: repo, pr: prInfo.pr, sha: prInfo.pr.head.sha))
+                }
+            }
+        }
+        return result
+    }
+
+    /// Get all PRs that need check status fetched (no status yet or SHA changed)
+    public func getPRsNeedingCheckStatus() -> [(repo: String, pr: PullRequest)] {
+        var result: [(repo: String, pr: PullRequest)] = []
+        for (repo, prInfos) in pullRequests {
+            for prInfo in prInfos {
+                // Need to fetch if no status or if SHA changed (new commits)
+                if prInfo.checkStatus == nil || prInfo.lastCheckedSHA != prInfo.pr.head.sha {
+                    result.append((repo: repo, pr: prInfo.pr))
+                }
+            }
+        }
+        return result
     }
 
     /// Clear all pull requests

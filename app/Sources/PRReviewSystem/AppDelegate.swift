@@ -29,6 +29,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cleanup service for old PR directories
     private var cleanupService: CleanupService?
 
+    /// Timer for polling pending check statuses
+    private var checkStatusTimer: Timer?
+
+    /// Interval for polling pending checks (30 seconds)
+    private let checkStatusPollInterval: TimeInterval = 30
+
     // MARK: - Application Lifecycle
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -65,6 +71,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         // Stop polling
         poller?.stopPolling()
+        checkStatusTimer?.invalidate()
+        checkStatusTimer = nil
     }
 
     // MARK: - Configuration
@@ -264,7 +272,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBarController.updatePullRequests(allPRs)
         }
 
-        // Fetch commit messages in parallel (fire and forget)
+        // Fetch commit messages and check statuses in parallel (fire and forget)
         for (repo, prInfos) in allPRs {
             let parts = repo.split(separator: "/")
             guard parts.count == 2 else { continue }
@@ -272,6 +280,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let repoName = String(parts[1])
 
             for prInfo in prInfos {
+                // Fetch commit message
                 Task {
                     do {
                         if let commit = try await api.getLastCommit(owner: owner, repo: repoName, number: prInfo.pr.number) {
@@ -287,6 +296,95 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         print("Error fetching commit for PR #\(prInfo.pr.number): \(error)")
                     }
                 }
+
+                // Fetch check status
+                Task {
+                    await fetchCheckStatus(for: prInfo.pr, in: repo, owner: owner, repoName: repoName)
+                }
+            }
+        }
+
+        // Start or update the check status polling timer
+        await MainActor.run {
+            startCheckStatusPollingIfNeeded()
+        }
+    }
+
+    /// Fetch check status for a single PR
+    private func fetchCheckStatus(for pr: PullRequest, in repo: String, owner: String, repoName: String) async {
+        guard let api = githubAPI else { return }
+
+        do {
+            let status = try await api.getCheckStatus(owner: owner, repo: repoName, ref: pr.head.sha)
+            await MainActor.run {
+                menuBarController.updateCheckStatus(
+                    forPR: pr.number,
+                    inRepo: repo,
+                    status: status,
+                    sha: pr.head.sha
+                )
+            }
+        } catch {
+            print("Error fetching check status for PR #\(pr.number): \(error)")
+        }
+    }
+
+    /// Start polling for pending check statuses
+    private func startCheckStatusPollingIfNeeded() {
+        // Invalidate existing timer
+        checkStatusTimer?.invalidate()
+
+        // Check if there are any pending checks
+        let pendingPRs = menuBarController.getPRsWithPendingChecks()
+        guard !pendingPRs.isEmpty else {
+            checkStatusTimer = nil
+            return
+        }
+
+        // Start polling timer
+        checkStatusTimer = Timer.scheduledTimer(withTimeInterval: checkStatusPollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.pollPendingCheckStatuses()
+            }
+        }
+    }
+
+    /// Poll check statuses for PRs with pending checks
+    private func pollPendingCheckStatuses() async {
+        guard githubAPI != nil else { return }
+
+        let pendingPRs = await MainActor.run {
+            menuBarController.getPRsWithPendingChecks()
+        }
+
+        guard !pendingPRs.isEmpty else {
+            // No more pending checks, stop the timer
+            await MainActor.run {
+                checkStatusTimer?.invalidate()
+                checkStatusTimer = nil
+            }
+            return
+        }
+
+        // Fetch status for each pending PR
+        for (repo, pr, _) in pendingPRs {
+            let parts = repo.split(separator: "/")
+            guard parts.count == 2 else { continue }
+            let owner = String(parts[0])
+            let repoName = String(parts[1])
+
+            await fetchCheckStatus(for: pr, in: repo, owner: owner, repoName: repoName)
+        }
+
+        // Check if we still have pending checks
+        let stillPending = await MainActor.run {
+            menuBarController.getPRsWithPendingChecks()
+        }
+
+        if stillPending.isEmpty {
+            await MainActor.run {
+                checkStatusTimer?.invalidate()
+                checkStatusTimer = nil
             }
         }
     }
