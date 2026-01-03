@@ -1,0 +1,154 @@
+# Environment and secrets
+.env
+.env.*
+.env.local
+.env.*.local
+*.env
+.envrc
+.secrets
+secrets.json
+secrets.yml
+secrets.yaml
+credentials.json
+credentials.yml
+credentials.yaml
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+.htpasswd
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Dependencies
+node_modules/
+vendor/
+bower_components/
+jspm_packages/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Ruby
+*.gem
+.bundle/
+vendor/bundle
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+target/
+
+# Build outputs
+dist/
+build/
+out/
+*.min.js
+*.bundle.js
+*.min.css
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.tmp
+*.temp
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Test outputs
+test-results/
+test-output/
+
+# Cache directories
+.cache/
+.npm/
+.yarn/
+.pnpm-store/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+
+# Docker
+.docker/
+
+# Misc
+*.pid
+*.seed
+*.pid.lock
