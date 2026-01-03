@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-01-03
+
+### Added
+- GitHub Actions check status display in PR menu (✅/❌/⏳)
+- Automatic polling for pending checks (every 30 seconds)
+- Check status tooltip with detailed pass/fail/pending counts
+- Proper macOS app bundle (`PRReview.app` in `/Applications`)
+- `:PRReview config` command to open config file in Neovim
+- `make install-app` and `make uninstall-app` targets
+
+### Changed
+- App now runs as proper `.app` bundle with full notification support
+- Check status re-fetches automatically on new commits
+- Polling stops automatically when all checks complete
+- Updated Info.plist with proper bundle identifier
+
 ## [1.1.0] - 2026-01-03
 
 ### Added
