@@ -128,7 +128,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     let api = GitHubAPI(token: token)
                     do {
                         let repos = try await api.listRepos()
-                        return repos.map { $0.fullName }
+                        // Filter out archived repos
+                        return repos.filter { $0.archived != true }.map { $0.fullName }
                     } catch {
                         print("Error discovering repos: \(error)")
                         return []
@@ -144,7 +145,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                         let api = GitHubAPI(token: config.githubToken)
                         do {
                             let repos = try await api.listRepos()
-                            return repos.map { $0.fullName }
+                            // Filter out archived repos
+                            return repos.filter { $0.archived != true }.map { $0.fullName }
                         } catch {
                             print("Error discovering repos with default token: \(error)")
                             return []

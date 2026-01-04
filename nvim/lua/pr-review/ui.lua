@@ -399,34 +399,67 @@ function M.fetch_all_prs(callback)
   end
 end
 
---- Open the PR list window
-function M.pr_list()
-  -- Close existing window if open
-  M.close_pr_list()
+--- Show PR description in a floating window
+function M.show_description()
+  local state = require("pr-review.state")
 
-  -- Create floating window (50% of screen)
+  if not state.is_active() then
+    vim.notify("No active PR review session", vim.log.levels.WARN)
+    return
+  end
+
+  local pr = state.get_pr()
+  if not pr then
+    vim.notify("No PR data available", vim.log.levels.WARN)
+    return
+  end
+
+  -- Parse description into lines
+  local body = pr.body or "(No description)"
+  local desc_lines = vim.split(body, "\n", { plain = true })
+
+  -- Build content
+  local lines = {
+    string.format("PR #%d: %s", pr.number, pr.title),
+    string.format("Author: %s", pr.user and pr.user.login or "unknown"),
+    string.format("Branch: %s → %s", pr.head.ref, pr.base.ref),
+    "",
+    "─────────────────────────────────────────────────────────",
+    "",
+  }
+
+  for _, line in ipairs(desc_lines) do
+    table.insert(lines, line)
+  end
+
+  -- Calculate window size
+  local max_width = 80
+  local width = math.min(max_width, vim.o.columns - 10)
+  local height = math.min(#lines + 2, vim.o.lines - 10)
+
+  -- Create floating window
   local win, buf = M.create_floating_window({
-    width_pct = 0.5,
-    height_pct = 0.5,
-    title = "PR Review - Open Pull Requests",
+    width = width,
+    height = height,
+    title = "PR Description",
     border = "rounded",
   })
 
-  M.state.win = win
-  M.state.buf = buf
-  M.state.prs = {}
-  M.state.selected = 1
-
-  -- Set initial content
+  -- Set content
   vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "  Loading..." })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
+  vim.bo[buf].filetype = "markdown"
+  vim.wo[win].wrap = true
 
-  -- Setup keymaps
-  setup_keymaps()
-
-  -- Fetch PRs
-  M.refresh_pr_list()
+  -- Close keymaps
+  local opts = { buffer = buf, noremap = true, silent = true }
+  vim.keymap.set("n", "q", function()
+    vim.api.nvim_win_close(win, true)
+  end, opts)
+  vim.keymap.set("n", "<Esc>", function()
+    vim.api.nvim_win_close(win, true)
+  end, opts)
 end
 
 return M

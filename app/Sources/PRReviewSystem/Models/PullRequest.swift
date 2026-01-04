@@ -48,9 +48,10 @@ public struct Repository: Codable, Equatable, Sendable {
     public let fullName: String
     public let htmlUrl: String
     public let cloneUrl: String
+    public let archived: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case id, name
+        case id, name, archived
         case fullName = "full_name"
         case htmlUrl = "html_url"
         case cloneUrl = "clone_url"

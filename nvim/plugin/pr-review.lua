@@ -10,27 +10,16 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   local subcommand = args[1]
 
   if not subcommand then
-    vim.notify("Usage: :PRReview <list|open|comments|submit|sync|approve|close>", vim.log.levels.WARN)
+    vim.notify("Usage: :PRReview <description|comments|sync|approve|close>", vim.log.levels.WARN)
     return
   end
 
-  if subcommand == "list" then
-    local ui = require("pr-review.ui")
-    ui.pr_list()
-  elseif subcommand == "open" then
-    local url = args[2]
-    if not url then
-      vim.notify("Usage: :PRReview open <url>", vim.log.levels.WARN)
-      return
-    end
-    local pr_open = require("pr-review.open")
-    pr_open.open_pr(url)
-  elseif subcommand == "comments" then
+  if subcommand == "comments" then
     local pr_comments = require("pr-review.comments")
     pr_comments.list_comments()
-  elseif subcommand == "submit" then
-    local pr_review = require("pr-review.review")
-    pr_review.show_submit_ui()
+  elseif subcommand == "description" or subcommand == "desc" then
+    local ui = require("pr-review.ui")
+    ui.show_description()
   elseif subcommand == "sync" or subcommand == "update" or subcommand == "refresh" then
     local pr_open = require("pr-review.open")
     pr_open.sync()
@@ -40,9 +29,6 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   elseif subcommand == "approve" then
     local pr_review = require("pr-review.review")
     pr_review.quick_approve(false)
-  elseif subcommand == "approve!" then
-    local pr_review = require("pr-review.review")
-    pr_review.quick_approve(true) -- force approve even if out of sync
   elseif subcommand == "config" then
     -- Open config file in current buffer
     local config_path = vim.fn.expand("~/.config/pr-review/config.json")
@@ -86,7 +72,7 @@ end, {
     local args = vim.split(cmdline, "%s+")
     if #args == 2 then
       -- Complete subcommands
-      return { "list", "open", "comments", "submit", "sync", "approve", "approve!", "close", "config" }
+      return { "description", "comments", "sync", "approve", "close", "config" }
     end
     return {}
   end,
