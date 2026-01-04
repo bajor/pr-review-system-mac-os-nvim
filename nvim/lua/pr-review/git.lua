@@ -263,4 +263,34 @@ function M.build_pr_path(clone_root, owner, repo, pr_number)
   return string.format("%s/%s/%s/pr-%d", clone_root, owner, repo, pr_number)
 end
 
+--- Check how many commits the current branch is behind the base branch
+---@param path string Repository path
+---@param base_branch string Base branch to compare against (e.g., "main")
+---@param callback fun(behind: number|nil, err: string|nil)
+function M.count_commits_behind(path, base_branch, callback)
+  -- First fetch the base branch
+  run_git({ "fetch", "origin", base_branch }, {
+    cwd = path,
+    on_exit = function(fetch_code, _, _)
+      if fetch_code ~= 0 then
+        callback(nil, "Failed to fetch base branch")
+        return
+      end
+
+      -- Count commits behind
+      run_git({ "rev-list", "--count", "HEAD..origin/" .. base_branch }, {
+        cwd = path,
+        on_exit = function(code, stdout, _)
+          if code == 0 and #stdout > 0 then
+            local behind = tonumber(stdout[1]) or 0
+            callback(behind, nil)
+          else
+            callback(nil, "Failed to count commits behind")
+          end
+        end,
+      })
+    end,
+  })
+end
+
 return M

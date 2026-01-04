@@ -17,6 +17,29 @@ local SYNC_INTERVAL_MS = 5 * 60 * 1000 -- 5 minutes
 --- Last known commit SHA (to detect changes)
 local last_known_sha = nil
 
+--- How many commits behind base branch
+local commits_behind = 0
+
+--- Setup the winbar warning highlight group
+local function setup_warning_highlight()
+  vim.api.nvim_set_hl(0, "PRReviewWarning", { fg = "#ffffff", bg = "#cc0000", bold = true })
+end
+
+--- Update the winbar to show sync status
+local function update_winbar()
+  setup_warning_highlight()
+  local pr = state.get_pr()
+  if not pr then return end
+
+  if commits_behind > 0 then
+    local plural = commits_behind == 1 and "commit" or "commits"
+    vim.wo.winbar = string.format("%%#PRReviewWarning# OUT OF SYNC: %d %s behind %s - run :PRReview sync %%*",
+      commits_behind, plural, pr.base.ref)
+  else
+    vim.wo.winbar = ""
+  end
+end
+
 --- Show a loading notification
 ---@param msg string
 local function notify_loading(msg)
@@ -376,6 +399,16 @@ function M.open_pr(url)
         return
       end
 
+      -- Check if behind base branch
+      local base_branch = pr.base.ref
+      git.count_commits_behind(clone_path, base_branch, function(behind, behind_err)
+        if not behind_err and behind then
+          commits_behind = behind
+        else
+          commits_behind = 0
+        end
+      end)
+
       -- Fetch files and comments
       fetch_pr_data(owner, repo, number, token, function(data_err)
         if data_err then
@@ -395,6 +428,9 @@ function M.open_pr(url)
 
         -- Open the first file
         open_first_file()
+
+        -- Update winbar (show warning if behind base)
+        vim.defer_fn(update_winbar, 100)
 
         notify_success(string.format(
           "PR #%d: %s (%d files) - auto-sync enabled",
@@ -417,6 +453,10 @@ function M.close_pr()
   -- Stop sync timer
   stop_sync_timer()
   last_known_sha = nil
+  commits_behind = 0
+
+  -- Clear winbar
+  vim.wo.winbar = ""
 
   -- Clear all PR review keymaps
   keymaps.clear()
