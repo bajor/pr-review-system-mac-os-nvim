@@ -210,11 +210,18 @@ function M.comment_at_cursor()
   comments.show_comment_thread()
 end
 
+--- Show PR description in floating window
+function M.show_description()
+  local ui = require("pr-review.ui")
+  ui.show_description()
+end
+
 --- All PR review keymaps (simplified)
 M.keymaps = {
   { mode = "n", lhs = "nn", rhs = function() M.next_point() end, desc = "Next diff/comment" },
   { mode = "n", lhs = "pp", rhs = function() M.prev_point() end, desc = "Previous diff/comment" },
   { mode = "n", lhs = "cc", rhs = function() M.comment_at_cursor() end, desc = "Comment at cursor" },
+  { mode = "n", lhs = "<leader>dd", rhs = function() M.show_description() end, desc = "Show PR description" },
 }
 
 --- Setup all keymaps for PR review mode

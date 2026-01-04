@@ -109,6 +109,7 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 - Shows all open PRs from configured repos
 - Displays PR title and last commit message
 - Click a PR to clone/update and open in Ghostty + Neovim
+- **Open All PRs** - Opens all PRs in separate Ghostty tabs
 - **Refresh** - Manually refresh PR list
 - **Quit** - Exit the app
 
@@ -133,13 +134,14 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 
 ### Review Mode Keybindings
 
-Only 3 shortcuts to remember:
+Only 4 shortcuts to remember:
 
 | Key | Action |
 |-----|--------|
 | `nn` | Next diff or comment (across all files) |
 | `pp` | Previous diff or comment (across all files) |
 | `cc` | Open/create comment at cursor |
+| `<leader>dd` | Show PR description |
 
 **Navigation (`nn` / `pp`):**
 - Jumps to next/previous "point of interest" (diff hunk or comment)
