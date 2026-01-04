@@ -280,6 +280,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .refreshRequested,
             object: nil
         )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOpenAllPRs(_:)),
+            name: .openAllPRs,
+            object: nil
+        )
     }
 
     private func requestNotificationPermissions() {
@@ -301,6 +308,35 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func handleRefreshRequested() {
         Task {
             await refreshPullRequests()
+        }
+    }
+
+    @objc private func handleOpenAllPRs(_ notification: Notification) {
+        guard let prs = notification.userInfo?["prs"] as? [PullRequest],
+              let launcher = launcher else { return }
+
+        Task {
+            // Build list of (pr, owner, repo) tuples
+            var prInfos: [(pr: PullRequest, owner: String, repo: String)] = []
+            for pr in prs {
+                guard let repoFullName = pr.head.repo?.fullName else { continue }
+                let parts = repoFullName.split(separator: "/")
+                guard parts.count == 2 else { continue }
+                let owner = String(parts[0])
+                let repo = String(parts[1])
+                prInfos.append((pr: pr, owner: owner, repo: repo))
+            }
+
+            guard !prInfos.isEmpty else { return }
+
+            do {
+                try await launcher.openAllPRs(prInfos)
+            } catch {
+                notificationManager.notify(
+                    title: "Failed to Open PRs",
+                    body: error.localizedDescription
+                )
+            }
         }
     }
 

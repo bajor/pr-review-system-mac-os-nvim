@@ -149,6 +149,14 @@ public final class MenuBarController: NSObject {
         // Actions
         newMenu.addItem(NSMenuItem.separator())
 
+        // Open All PRs option (only show if there are PRs)
+        let totalPRCount = pullRequests.values.reduce(0) { $0 + $1.count }
+        if totalPRCount > 0 {
+            let openAllItem = NSMenuItem(title: "Open All PRs (\(totalPRCount))", action: #selector(openAllClicked), keyEquivalent: "a")
+            openAllItem.target = self
+            newMenu.addItem(openAllItem)
+        }
+
         let refreshItem = NSMenuItem(title: "Refresh", action: #selector(refreshClicked), keyEquivalent: "r")
         refreshItem.target = self
         newMenu.addItem(refreshItem)
@@ -425,6 +433,22 @@ public final class MenuBarController: NSObject {
         NotificationCenter.default.post(name: .refreshRequested, object: nil)
     }
 
+    @objc private func openAllClicked() {
+        // Collect all PRs
+        var allPRs: [PullRequest] = []
+        for (_, prInfos) in pullRequests.sorted(by: { $0.key < $1.key }) {
+            for prInfo in prInfos {
+                allPRs.append(prInfo.pr)
+            }
+        }
+        guard !allPRs.isEmpty else { return }
+        NotificationCenter.default.post(
+            name: .openAllPRs,
+            object: nil,
+            userInfo: ["prs": allPRs]
+        )
+    }
+
     @objc private func quitClicked() {
         NSApplication.shared.terminate(nil)
     }
@@ -514,4 +538,7 @@ public extension Notification.Name {
 
     /// Posted when refresh is requested
     static let refreshRequested = Notification.Name("PRReviewSystem.refreshRequested")
+
+    /// Posted when "Open All PRs" is clicked
+    static let openAllPRs = Notification.Name("PRReviewSystem.openAllPRs")
 }

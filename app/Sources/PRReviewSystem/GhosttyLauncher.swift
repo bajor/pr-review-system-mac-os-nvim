@@ -71,6 +71,125 @@ public final class GhosttyLauncher {
         try await launchGhostty(withPRURL: url, workingDirectory: nil)
     }
 
+    /// Open multiple PRs, each in a new Ghostty tab
+    /// - Parameter prs: Array of (pr, owner, repo) tuples
+    public func openAllPRs(_ prs: [(pr: PullRequest, owner: String, repo: String)]) async throws {
+        guard !prs.isEmpty else { return }
+
+        // Clone/update all repos first (in parallel for speed)
+        var prPaths: [(pr: PullRequest, path: String)] = []
+
+        await withTaskGroup(of: (PullRequest, String)?.self) { group in
+            for (pr, owner, repo) in prs {
+                group.addTask {
+                    do {
+                        let path = try await self.prepareRepo(pr: pr, owner: owner, repo: repo)
+                        return (pr, path)
+                    } catch {
+                        print("Failed to prepare repo for PR #\(pr.number): \(error)")
+                        return nil
+                    }
+                }
+            }
+
+            for await result in group {
+                if let (pr, path) = result {
+                    prPaths.append((pr: pr, path: path))
+                }
+            }
+        }
+
+        // Sort by PR number to maintain consistent order
+        prPaths.sort { $0.pr.number < $1.pr.number }
+
+        guard !prPaths.isEmpty else {
+            throw GhosttyLauncherError.launchFailed(message: "No PRs could be prepared")
+        }
+
+        // Open first PR - this launches Ghostty
+        let first = prPaths[0]
+        try await launchGhostty(withPRURL: first.pr.htmlUrl, workingDirectory: first.path)
+
+        // Wait a bit for Ghostty to start
+        try await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds
+
+        // Open remaining PRs in new tabs using AppleScript
+        for i in 1..<prPaths.count {
+            let prInfo = prPaths[i]
+            try await openInNewTab(prURL: prInfo.pr.htmlUrl, workingDirectory: prInfo.path)
+            // Small delay between tabs
+            try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        }
+    }
+
+    /// Prepare a repo for a PR (clone or update)
+    private func prepareRepo(pr: PullRequest, owner: String, repo: String) async throws -> String {
+        let cloneRoot = config.cloneRoot
+        let expandedCloneRoot: String
+        if cloneRoot.hasPrefix("~") {
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            expandedCloneRoot = home + cloneRoot.dropFirst()
+        } else {
+            expandedCloneRoot = cloneRoot
+        }
+
+        let clonePath = GitOperations.buildPRPath(cloneRoot: expandedCloneRoot, owner: owner, repo: repo, prNumber: pr.number)
+
+        let fileManager = FileManager.default
+        let cloneURL = URL(fileURLWithPath: clonePath)
+        let parentURL = cloneURL.deletingLastPathComponent()
+
+        if !fileManager.fileExists(atPath: parentURL.path) {
+            try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)
+        }
+
+        let token = config.resolveToken(for: owner)
+        let repoURL = "https://\(token)@github.com/\(owner)/\(repo).git"
+        let branch = pr.head.ref
+
+        if GitOperations.isGitRepo(at: clonePath) {
+            try await GitOperations.setRemoteURL(at: clonePath, url: repoURL)
+            try await GitOperations.fetchAndReset(at: clonePath, branch: branch)
+        } else {
+            try await GitOperations.clone(url: repoURL, to: clonePath, branch: branch)
+        }
+
+        return clonePath
+    }
+
+    /// Open a PR in a new Ghostty tab using AppleScript
+    private func openInNewTab(prURL: String, workingDirectory: String) async throws {
+        let nvimPath = config.nvimPath
+        let shellCommand = "cd '\(workingDirectory)' && \(nvimPath) -c 'PRReview open \(prURL)'"
+
+        // AppleScript to: activate Ghostty, send Cmd+T for new tab, type command, press Enter
+        let script = """
+        tell application "Ghostty"
+            activate
+        end tell
+
+        delay 0.2
+
+        tell application "System Events"
+            tell process "Ghostty"
+                keystroke "t" using command down
+                delay 0.3
+                keystroke "\(shellCommand.replacingOccurrences(of: "\"", with: "\\\""))"
+                delay 0.1
+                keystroke return
+            end tell
+        end tell
+        """
+
+        let appleScript = NSAppleScript(source: script)
+        var errorInfo: NSDictionary?
+        appleScript?.executeAndReturnError(&errorInfo)
+
+        if let error = errorInfo {
+            print("AppleScript error: \(error)")
+        }
+    }
+
     // MARK: - Private Helpers
 
     /// Launch Ghostty with Neovim configured for PR review
