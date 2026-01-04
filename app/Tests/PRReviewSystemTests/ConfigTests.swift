@@ -76,7 +76,7 @@ struct ConfigLoaderTests {
         try json.write(to: tmpFile, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        #expect(throws: ConfigError.missingRequiredField(name: "GITHUB_TOKEN_PR_REVIEW_SYSTEM environment variable")) {
+        #expect(throws: ConfigError.missingRequiredField(name: "github_token (set GITHUB_TOKEN_PR_REVIEW_SYSTEM env var or add to config)")) {
             try ConfigLoader.load(from: tmpFile.path)
         }
     }

@@ -51,14 +51,16 @@ public struct Config: Codable, Equatable, Sendable {
     }
 
     /// Custom decoder to handle optional fields with defaults
-    /// Note: githubToken is read from GITHUB_TOKEN_PR_REVIEW_SYSTEM env var, not from config file
+    /// Note: githubToken is read from GITHUB_TOKEN_PR_REVIEW_SYSTEM env var first, falls back to config file
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
-        // Token comes from environment variable, not config file
+        // Token: prefer env var, fall back to config file (for GUI apps that don't see shell env)
         // Use getenv() directly for testability (ProcessInfo caches at process start)
         if let envValue = getenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM") {
             githubToken = String(cString: envValue)
+        } else if let configToken = try container.decodeIfPresent(String.self, forKey: .githubToken) {
+            githubToken = configToken
         } else {
             githubToken = ""
         }
@@ -247,7 +249,7 @@ enum ConfigLoader {
     /// Validate configuration
     private static func validate(_ config: Config) throws {
         if config.githubToken.isEmpty {
-            throw ConfigError.missingRequiredField(name: "GITHUB_TOKEN_PR_REVIEW_SYSTEM environment variable")
+            throw ConfigError.missingRequiredField(name: "github_token (set GITHUB_TOKEN_PR_REVIEW_SYSTEM env var or add to config)")
         }
 
         if config.githubUsername.isEmpty {
