@@ -71,8 +71,15 @@ local function validate_config(config)
 end
 
 --- Load configuration from JSON file
+--- GitHub token is read from GITHUB_TOKEN_PR_REVIEW_SYSTEM env var (required)
 ---@return PRReviewConfig?, string?
 function M.load()
+  -- Get token from environment variable (required)
+  local github_token = os.getenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM")
+  if not github_token or github_token == "" then
+    return nil, "GITHUB_TOKEN_PR_REVIEW_SYSTEM environment variable is required"
+  end
+
   local path = M.config_path
 
   -- Check if file exists
@@ -98,6 +105,9 @@ function M.load()
 
   -- Merge with defaults
   local config = vim.tbl_deep_extend("force", vim.deepcopy(M.defaults), parsed)
+
+  -- Override token from env var (never from config file)
+  config.github_token = github_token
 
   -- Expand paths
   config.clone_root = expand_path(config.clone_root)
@@ -128,9 +138,8 @@ function M.create_default()
     return false, "Config file already exists"
   end
 
-  -- Create default config
+  -- Create default config (token comes from GITHUB_TOKEN env var)
   local default = {
-    github_token = "ghp_xxxxxxxxxxxxxxxxxxxx",
     github_username = "your-username",
     repos = { "owner/repo1", "owner/repo2" },
     clone_root = "~/.local/share/pr-review/repos",

@@ -10,6 +10,13 @@ local git = require("pr-review.git")
 local keymaps = require("pr-review.keymaps")
 local state = require("pr-review.state")
 
+--- Sync timer (runs every 5 minutes)
+local sync_timer = nil
+local SYNC_INTERVAL_MS = 5 * 60 * 1000 -- 5 minutes
+
+--- Last known commit SHA (to detect changes)
+local last_known_sha = nil
+
 --- Show a loading notification
 ---@param msg string
 local function notify_loading(msg)
@@ -98,6 +105,133 @@ local function fetch_pr_data(owner, repo, number, token, callback)
       end)
     end)
   end)
+end
+
+--- Stop the sync timer
+local function stop_sync_timer()
+  if sync_timer then
+    sync_timer:stop()
+    sync_timer:close()
+    sync_timer = nil
+  end
+end
+
+--- Sync the PR with remote (fetch latest, update files/comments)
+---@param silent boolean If true, don't show notifications unless something changed
+local function sync_pr(silent)
+  if not state.is_active() then
+    return
+  end
+
+  local cfg, cfg_err = config.load()
+  if cfg_err then
+    if not silent then
+      notify_error("Config error: " .. cfg_err)
+    end
+    return
+  end
+
+  local owner = state.get_owner()
+  local repo = state.get_repo()
+  local number = state.get_number()
+  local clone_path = state.get_clone_path()
+  local pr = state.get_pr()
+
+  if not owner or not repo or not number or not clone_path or not pr then
+    return
+  end
+
+  local branch = pr.head.ref
+  local repo_url = string.format("https://%s@github.com/%s/%s.git", cfg.github_token, owner, repo)
+
+  -- Check remote for updates first
+  api.get_pr(owner, repo, number, cfg.github_token, function(new_pr, pr_err)
+    if pr_err then
+      if not silent then
+        notify_error("Sync failed: " .. pr_err)
+      end
+      return
+    end
+
+    -- Check if SHA changed
+    local new_sha = new_pr.head.sha
+    if new_sha == last_known_sha then
+      -- No changes
+      if not silent then
+        vim.notify("PR is up to date", vim.log.levels.INFO)
+      end
+      return
+    end
+
+    -- SHA changed, do full sync
+    if not silent then
+      notify_loading("Syncing PR (new commits detected)...")
+    end
+
+    -- Update local repo
+    git.fetch_reset(clone_path, branch, repo_url, function(success, err)
+      if not success then
+        notify_error("Sync failed: " .. (err or "git error"))
+        return
+      end
+
+      -- Update PR data
+      state.set_pr(new_pr)
+      last_known_sha = new_sha
+
+      -- Re-fetch files
+      api.get_pr_files(owner, repo, number, cfg.github_token, function(files, files_err)
+        if files_err then
+          notify_error("Failed to fetch files: " .. files_err)
+          return
+        end
+
+        state.set_files(files)
+
+        -- Re-fetch comments
+        api.get_pr_comments(owner, repo, number, cfg.github_token, function(new_comments, comments_err)
+          if not comments_err then
+            -- Clear and re-index comments
+            for _, file in ipairs(files) do
+              state.set_comments(file.filename, {})
+            end
+            for _, comment in ipairs(new_comments or {}) do
+              if comment.path then
+                local file_comments = state.get_comments(comment.path)
+                table.insert(file_comments, comment)
+                state.set_comments(comment.path, file_comments)
+              end
+            end
+          end
+
+          -- Refresh current file display
+          local current_file = state.get_current_file()
+          if current_file then
+            local buf = vim.api.nvim_get_current_buf()
+            diff.apply_highlights(buf, current_file.patch)
+            comments.show_comments(buf, state.get_comments(current_file.filename))
+          end
+
+          vim.notify("PR synced - new commits loaded", vim.log.levels.INFO)
+        end)
+      end)
+    end)
+  end)
+end
+
+--- Start the periodic sync timer
+local function start_sync_timer()
+  stop_sync_timer()
+
+  sync_timer = vim.uv.new_timer()
+  sync_timer:start(SYNC_INTERVAL_MS, SYNC_INTERVAL_MS, vim.schedule_wrap(function()
+    sync_pr(true) -- silent sync
+  end))
+end
+
+--- Manual sync command
+function M.sync()
+  sync_pr(false)
 end
 
 --- Clone or update the repository
@@ -192,11 +326,17 @@ function M.open_pr(url)
         -- Change to clone directory
         vim.cmd("cd " .. vim.fn.fnameescape(clone_path))
 
+        -- Store initial SHA for change detection
+        last_known_sha = pr.head.sha
+
+        -- Start periodic sync timer (every 5 mins)
+        start_sync_timer()
+
         -- Open the first file
         open_first_file()
 
         notify_success(string.format(
-          "PR #%d: %s (%d files)",
+          "PR #%d: %s (%d files) - auto-sync enabled",
           number,
           pr.title:sub(1, 40),
           #state.get_files()
@@ -212,6 +352,10 @@ function M.close_pr()
     vim.notify("No active PR review session", vim.log.levels.WARN)
     return
   end
+
+  -- Stop sync timer
+  stop_sync_timer()
+  last_known_sha = nil
 
   -- Clear all PR review keymaps
   keymaps.clear()

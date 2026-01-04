@@ -108,6 +108,10 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 - **Refresh** - Manually refresh PR list
 - **Quit** - Exit the app
 
+**Ghostty Behavior:**
+- If Ghostty is already running → PR opens in a **new tab** (Cmd+T)
+- If Ghostty is not running → Ghostty launches and **maximizes** (Cmd+Shift+F)
+
 **Note:** The app runs as a proper `.app` bundle from `/Applications`, enabling full system notification support.
 
 ### Neovim Commands
@@ -118,8 +122,13 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 | `:PRReview open {url}` | Clone/pull PR, enter review mode |
 | `:PRReview comments` | Show all comments in current PR |
 | `:PRReview submit` | Submit review (approve/request changes/comment) |
+| `:PRReview sync` | Force sync PR with remote (fetch latest commits) |
+| `:PRReview update` | Alias for sync |
+| `:PRReview refresh` | Alias for sync |
 | `:PRReview close` | Exit review mode |
 | `:PRReview config` | Open config file for editing |
+
+**Auto-sync:** When a PR is open, it automatically syncs every 5 minutes to fetch new commits and comments.
 
 ### PR List Window
 
@@ -154,15 +163,27 @@ When viewing the PR list (`:PRReview list`):
 
 | Key | Action |
 |-----|--------|
-| `<leader>cc` | Create comment on current line |
+| `cc` | Open comment thread (view/edit/add comments) |
+| `<leader>cc` | Quick new comment popup |
 | `<leader>nc` | Jump to next comment |
 | `<leader>pc` | Jump to previous comment |
 | `<leader>lc` | Open comment list |
 | `<leader>rc` | Resolve/unresolve comment |
 
-When creating a comment:
-- `:w` - Save comment
-- `:q` - Cancel comment
+**Comment Thread View (`cc`):**
+
+Opens a floating window showing all comments on the current line:
+- Each comment shows author and content
+- Edit existing comments by modifying their text
+- Add new comments in the blank section at the bottom
+- Press `s` to save changes (update or create)
+- Press `q` or `Esc` to close
+
+**Quick Comment Popup (`<leader>cc`):**
+- Type your comment
+- Press `Esc` to exit insert mode
+- Press `s` to save and submit to GitHub
+- Press `q` to cancel
 
 **Review Submission:**
 

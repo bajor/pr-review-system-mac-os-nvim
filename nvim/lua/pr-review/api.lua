@@ -184,19 +184,89 @@ function M.create_comment(owner, repo, number, opts, token, callback)
   vim.schedule(function()
     local url = string.format("%s/repos/%s/%s/pulls/%d/comments", M.base_url, owner, repo, number)
 
+    -- GitHub API requires specific format for PR review comments
+    -- See: https://docs.github.com/en/rest/pulls/comments
     local body = {
       body = opts.body,
       commit_id = opts.commit_id,
       path = opts.path,
-      line = opts.line,
-      side = opts.side or "RIGHT", -- RIGHT for new code, LEFT for old code
     }
+
+    -- Use position-based commenting (works with diff hunks)
+    -- line + side is for the newer API but requires the line to be in a diff hunk
+    if opts.position then
+      body.position = opts.position
+    else
+      -- Try line-based (newer API)
+      body.line = opts.line
+      body.side = opts.side or "RIGHT"
+    end
 
     local response, err = request({
       url = url,
       method = "POST",
       token = token,
       body = body,
+    })
+
+    if err then
+      -- Add hint for common 422 error
+      if err:find("422") then
+        err = err .. " (Line must be in diff context - try commenting on a changed line)"
+      end
+      callback(nil, err)
+      return
+    end
+
+    callback(response.data, nil)
+  end)
+end
+
+--- Update an existing review comment
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param comment_id number Comment ID
+---@param body string New comment body
+---@param token string GitHub token
+---@param callback fun(comment: table|nil, err: string|nil)
+function M.update_comment(owner, repo, comment_id, body, token, callback)
+  vim.schedule(function()
+    local url = string.format("%s/repos/%s/%s/pulls/comments/%d", M.base_url, owner, repo, comment_id)
+
+    local response, err = request({
+      url = url,
+      method = "PATCH",
+      token = token,
+      body = { body = body },
+    })
+
+    if err then
+      callback(nil, err)
+      return
+    end
+
+    callback(response.data, nil)
+  end)
+end
+
+--- Create a general PR/issue comment (not line-specific)
+--- Use this for commenting on lines outside the diff
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param number number PR number
+---@param body string Comment body
+---@param token string GitHub token
+---@param callback fun(comment: table|nil, err: string|nil)
+function M.create_issue_comment(owner, repo, number, body, token, callback)
+  vim.schedule(function()
+    -- PRs are issues, so we use the issues endpoint
+    local url = string.format("%s/repos/%s/%s/issues/%d/comments", M.base_url, owner, repo, number)
+
+    local response, err = request({
+      url = url,
+      method = "POST",
+      token = token,
+      body = { body = body },
     })
 
     if err then

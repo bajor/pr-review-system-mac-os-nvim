@@ -24,7 +24,8 @@ M.keymaps = {
   { mode = "n", lhs = "<leader>pc", rhs = function() comments.prev_comment() end, desc = "Previous comment" },
 
   -- Comment actions
-  { mode = "n", lhs = "<leader>cc", rhs = function() comments.create_comment() end, desc = "Create comment" },
+  { mode = "n", lhs = "cc", rhs = function() comments.show_comment_thread() end, desc = "Open comment thread" },
+  { mode = "n", lhs = "<leader>cc", rhs = function() comments.create_comment() end, desc = "Quick new comment" },
   { mode = "n", lhs = "<leader>lc", rhs = function() comments.list_comments() end, desc = "List comments" },
   { mode = "n", lhs = "<leader>rc", rhs = function() comments.toggle_resolved() end, desc = "Toggle resolved" },
 
@@ -74,7 +75,7 @@ function M.get_help()
     { name = "File Navigation", keys = { "]f", "[f" } },
     { name = "Diff Navigation", keys = { "<leader>nd", "<leader>pd" } },
     { name = "Comment Navigation", keys = { "<leader>nc", "<leader>pc" } },
-    { name = "Comment Actions", keys = { "<leader>cc", "<leader>lc", "<leader>rc" } },
+    { name = "Comment Actions", keys = { "cc", "<leader>cc", "<leader>lc", "<leader>rc" } },
     { name = "Review Actions", keys = { "<leader>rs", "<leader>ra", "<leader>ri" } },
   }
 
