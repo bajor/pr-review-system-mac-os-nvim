@@ -249,6 +249,20 @@ function M.update_comment(owner, repo, comment_id, body, token, callback)
   end)
 end
 
+--- Get issue comments on a pull request (general comments, not line-specific)
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param number number PR number
+---@param token string GitHub token
+---@param callback fun(comments: table[]|nil, err: string|nil)
+function M.get_issue_comments(owner, repo, number, token, callback)
+  vim.schedule(function()
+    local url = string.format("%s/repos/%s/%s/issues/%d/comments?per_page=100", M.base_url, owner, repo, number)
+    local comments, err = fetch_all_pages(url, token)
+    callback(comments, err)
+  end)
+end
+
 --- Create a general PR/issue comment (not line-specific)
 --- Use this for commenting on lines outside the diff
 ---@param owner string Repository owner

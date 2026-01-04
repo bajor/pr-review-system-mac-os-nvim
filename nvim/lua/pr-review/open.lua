@@ -85,11 +85,10 @@ local function fetch_pr_data(owner, repo, number, token, callback)
 
       state.set_files(files)
 
-      -- Fetch comments
+      -- Fetch review comments (line-level)
       api.get_pr_comments(owner, repo, number, token, function(comments, comments_err)
         if comments_err then
-          -- Non-fatal, just log
-          vim.notify("Warning: Could not fetch comments: " .. comments_err, vim.log.levels.WARN)
+          vim.notify("Warning: Could not fetch review comments: " .. comments_err, vim.log.levels.WARN)
         else
           -- Index comments by file path
           for _, comment in ipairs(comments or {}) do
@@ -101,7 +100,38 @@ local function fetch_pr_data(owner, repo, number, token, callback)
           end
         end
 
-        callback(nil)
+        -- Also fetch issue comments (general PR comments)
+        api.get_issue_comments(owner, repo, number, token, function(issue_comments, issue_err)
+          if issue_err then
+            vim.notify("Warning: Could not fetch issue comments: " .. issue_err, vim.log.levels.WARN)
+          else
+            -- Parse issue comments that have file:line references in body
+            -- Format: **`file:line`**\n\ncomment body
+            for _, comment in ipairs(issue_comments or {}) do
+              local body = comment.body or ""
+              local file_path, line_num = body:match("^%*%*`([^:]+):(%d+)`%*%*")
+              if file_path and line_num then
+                -- Extract actual comment body (after the file reference)
+                local actual_body = body:gsub("^%*%*`[^`]+`%*%*\n*", "")
+                local parsed_comment = {
+                  id = comment.id,
+                  body = actual_body,
+                  path = file_path,
+                  line = tonumber(line_num),
+                  user = comment.user,
+                  created_at = comment.created_at,
+                  updated_at = comment.updated_at,
+                  issue_comment = true, -- Mark as issue comment
+                }
+                local file_comments = state.get_comments(file_path)
+                table.insert(file_comments, parsed_comment)
+                state.set_comments(file_path, file_comments)
+              end
+            end
+          end
+
+          callback(nil)
+        end)
       end)
     end)
   end)
@@ -188,13 +218,14 @@ local function sync_pr(silent)
 
         state.set_files(files)
 
-        -- Re-fetch comments
+        -- Clear comments for all files first
+        for _, file in ipairs(files) do
+          state.set_comments(file.filename, {})
+        end
+
+        -- Re-fetch review comments
         api.get_pr_comments(owner, repo, number, cfg.github_token, function(new_comments, comments_err)
           if not comments_err then
-            -- Clear and re-index comments
-            for _, file in ipairs(files) do
-              state.set_comments(file.filename, {})
-            end
             for _, comment in ipairs(new_comments or {}) do
               if comment.path then
                 local file_comments = state.get_comments(comment.path)
@@ -204,15 +235,41 @@ local function sync_pr(silent)
             end
           end
 
-          -- Refresh current file display
-          local current_file = state.get_current_file()
-          if current_file then
-            local buf = vim.api.nvim_get_current_buf()
-            diff.apply_highlights(buf, current_file.patch)
-            comments.show_comments(buf, state.get_comments(current_file.filename))
-          end
+          -- Also fetch issue comments
+          api.get_issue_comments(owner, repo, number, cfg.github_token, function(issue_comments, issue_err)
+            if not issue_err then
+              for _, comment in ipairs(issue_comments or {}) do
+                local body = comment.body or ""
+                local file_path, line_num = body:match("^%*%*`([^:]+):(%d+)`%*%*")
+                if file_path and line_num then
+                  local actual_body = body:gsub("^%*%*`[^`]+`%*%*\n*", "")
+                  local parsed_comment = {
+                    id = comment.id,
+                    body = actual_body,
+                    path = file_path,
+                    line = tonumber(line_num),
+                    user = comment.user,
+                    created_at = comment.created_at,
+                    updated_at = comment.updated_at,
+                    issue_comment = true,
+                  }
+                  local file_comments = state.get_comments(file_path)
+                  table.insert(file_comments, parsed_comment)
+                  state.set_comments(file_path, file_comments)
+                end
+              end
+            end
 
-          vim.notify("PR synced - new commits loaded", vim.log.levels.INFO)
+            -- Refresh current file display
+            local current_file = state.get_current_file()
+            if current_file then
+              local buf = vim.api.nvim_get_current_buf()
+              diff.apply_highlights(buf, current_file.patch)
+              comments.show_comments(buf, state.get_comments(current_file.filename))
+            end
+
+            vim.notify("PR synced - new commits loaded", vim.log.levels.INFO)
+          end)
         end)
       end)
     end)
