@@ -93,36 +93,6 @@ public final class GhosttyLauncher {
 
     // MARK: - Private Helpers
 
-    /// Check if Ghostty is currently running
-    private func isGhosttyRunning() -> Bool {
-        let runningApps = NSWorkspace.shared.runningApplications
-        return runningApps.contains { app in
-            app.bundleIdentifier == "com.mitchellh.ghostty" ||
-            app.localizedName == "Ghostty"
-        }
-    }
-
-    /// Run AppleScript and wait for completion
-    private func runAppleScript(_ source: String) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global().async {
-                var error: NSDictionary?
-                if let script = NSAppleScript(source: source) {
-                    script.executeAndReturnError(&error)
-                    if let error = error {
-                        continuation.resume(throwing: GhosttyLauncherError.launchFailed(
-                            message: error["NSAppleScriptErrorMessage"] as? String ?? "AppleScript error"
-                        ))
-                    } else {
-                        continuation.resume()
-                    }
-                } else {
-                    continuation.resume(throwing: GhosttyLauncherError.launchFailed(message: "Failed to create AppleScript"))
-                }
-            }
-        }
-    }
-
     /// Launch Ghostty with Neovim configured for PR review
     private func launchGhostty(withPRURL prURL: String, workingDirectory: String?) async throws {
         // Get the Ghostty CLI binary path
@@ -147,60 +117,16 @@ public final class GhosttyLauncher {
             shellCommand = "\(nvimPath) -c 'PRReview open \(prURL)'"
         }
 
-        let ghosttyWasRunning = isGhosttyRunning()
+        // Launch Ghostty using Process
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ghosttyBinary)
+        process.arguments = ["-e", "/bin/zsh", "-c", shellCommand]
 
-        if ghosttyWasRunning {
-            // Ghostty is already running - open new tab via AppleScript
-            // Escape single quotes in the command
-            let escapedCommand = shellCommand.replacingOccurrences(of: "'", with: "'\\''")
-
-            let appleScript = """
-            tell application "Ghostty"
-                activate
-            end tell
-            delay 0.2
-            tell application "System Events"
-                tell process "Ghostty"
-                    keystroke "t" using command down
-                    delay 0.3
-                    keystroke "\(escapedCommand)"
-                    keystroke return
-                end tell
-            end tell
-            """
-
-            try await runAppleScript(appleScript)
-            print("Opened new Ghostty tab with PR: \(prURL)")
-        } else {
-            // Ghostty is not running - launch it and maximize
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: ghosttyBinary)
-            process.arguments = ["-e", "/bin/zsh", "-c", shellCommand]
-
-            do {
-                try process.run()
-                print("Launched Ghostty with PR: \(prURL)")
-
-                // Wait for Ghostty to start, then maximize
-                try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-
-                let maximizeScript = """
-                tell application "Ghostty"
-                    activate
-                end tell
-                delay 0.2
-                tell application "System Events"
-                    tell process "Ghostty"
-                        keystroke "f" using {command down, shift down}
-                    end tell
-                end tell
-                """
-
-                try await runAppleScript(maximizeScript)
-                print("Maximized Ghostty window")
-            } catch {
-                throw GhosttyLauncherError.launchFailed(message: error.localizedDescription)
-            }
+        do {
+            try process.run()
+            print("Launched Ghostty with PR: \(prURL)")
+        } catch {
+            throw GhosttyLauncherError.launchFailed(message: error.localizedDescription)
         }
     }
 }
