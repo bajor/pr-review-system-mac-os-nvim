@@ -38,6 +38,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Interval for auto-refreshing PRs (15 minutes)
     private let autoRefreshInterval: TimeInterval = 15 * 60
 
+    /// Cached discovered repos (to avoid re-discovering on every refresh)
+    private var cachedRepos: [String]?
+
     // MARK: - Application Lifecycle
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -308,11 +311,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Determine which repos to check - use config.repos if specified, otherwise auto-discover
         let reposToCheck: [String]
-        if config.repos.isEmpty {
-            reposToCheck = await discoverRepos()
-            print("Auto-discovered \(reposToCheck.count) repos")
-        } else {
+        if !config.repos.isEmpty {
             reposToCheck = config.repos
+        } else if let cached = cachedRepos {
+            reposToCheck = cached
+        } else {
+            let discovered = await discoverRepos()
+            cachedRepos = discovered
+            print("Auto-discovered \(discovered.count) repos")
+            reposToCheck = discovered
         }
 
         // Fetch all repos in parallel
