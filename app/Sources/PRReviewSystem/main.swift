@@ -30,5 +30,5 @@ struct PRReviewSystemApp {
 
 /// Returns the current version
 public func getVersion() -> String {
-    "0.11.0"
+    "0.12.0"
 }
