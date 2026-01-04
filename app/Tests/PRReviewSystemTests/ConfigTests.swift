@@ -26,7 +26,7 @@ struct ConfigTests {
     }
 }
 
-@Suite("ConfigLoader Tests", .serialized)
+@Suite("ConfigLoader Tests")
 struct ConfigLoaderTests {
 
     @Test("Returns error when config file does not exist")
@@ -54,17 +54,8 @@ struct ConfigLoaderTests {
         }
     }
 
-    @Test("Returns error when GITHUB_TOKEN_PR_REVIEW_SYSTEM env var is missing")
+    @Test("Returns error when github_token is missing")
     func missingGithubToken() throws {
-        // Temporarily unset the env var if it exists
-        let originalValue = ProcessInfo.processInfo.environment["GITHUB_TOKEN_PR_REVIEW_SYSTEM"]
-        unsetenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM")
-        defer {
-            if let original = originalValue {
-                setenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM", original, 1)
-            }
-        }
-
         let json = """
         {
             "github_username": "user",
@@ -76,19 +67,16 @@ struct ConfigLoaderTests {
         try json.write(to: tmpFile, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        #expect(throws: ConfigError.missingRequiredField(name: "github_token (set GITHUB_TOKEN_PR_REVIEW_SYSTEM env var or add to config)")) {
+        #expect(throws: ConfigError.missingRequiredField(name: "github_token")) {
             try ConfigLoader.load(from: tmpFile.path)
         }
     }
 
     @Test("Returns error when github_username is missing")
     func missingGithubUsername() throws {
-        // Set env var for this test
-        setenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM", "ghp_test", 1)
-        defer { unsetenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM") }
-
         let json = """
         {
+            "github_token": "ghp_xxx",
             "repos": ["owner/repo"]
         }
         """
@@ -104,12 +92,9 @@ struct ConfigLoaderTests {
 
     @Test("Returns error when repos is empty")
     func emptyRepos() throws {
-        // Set env var for this test
-        setenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM", "ghp_test", 1)
-        defer { unsetenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM") }
-
         let json = """
         {
+            "github_token": "ghp_xxx",
             "github_username": "user",
             "repos": []
         }
@@ -126,12 +111,9 @@ struct ConfigLoaderTests {
 
     @Test("Returns error for invalid repo format")
     func invalidRepoFormat() throws {
-        // Set env var for this test
-        setenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM", "ghp_test", 1)
-        defer { unsetenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM") }
-
         let json = """
         {
+            "github_token": "ghp_xxx",
             "github_username": "user",
             "repos": ["invalid"]
         }
@@ -148,12 +130,9 @@ struct ConfigLoaderTests {
 
     @Test("Loads valid config successfully")
     func loadValidConfig() throws {
-        // Set env var for this test
-        setenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM", "ghp_test123", 1)
-        defer { unsetenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM") }
-
         let json = """
         {
+            "github_token": "ghp_test123",
             "github_username": "testuser",
             "repos": ["owner/repo1", "owner/repo2"],
             "clone_root": "/tmp/test/repos"
@@ -173,12 +152,9 @@ struct ConfigLoaderTests {
 
     @Test("Merges with defaults for missing optional fields")
     func mergeWithDefaults() throws {
-        // Set env var for this test
-        setenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM", "ghp_test123", 1)
-        defer { unsetenv("GITHUB_TOKEN_PR_REVIEW_SYSTEM") }
-
         let json = """
         {
+            "github_token": "ghp_test123",
             "github_username": "testuser",
             "repos": ["owner/repo"]
         }
