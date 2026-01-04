@@ -53,12 +53,12 @@ Create `~/.config/pr-review/config.json`:
 
 ```json
 {
-  "github_token": "ghp_xxxxxxxxxxxxxxxxxxxx",
+  "github_token": "ghp_your_default_token",
   "github_username": "your-username",
-  "repos": [
-    "owner/repo1",
-    "owner/repo2"
-  ],
+  "tokens": {
+    "my-org": "ghp_token_for_my_org",
+    "another-org": "ghp_token_for_another_org"
+  },
   "clone_root": "~/.local/share/pr-review/repos",
   "poll_interval_seconds": 300,
   "ghostty_path": "/Applications/Ghostty.app",
@@ -71,6 +71,10 @@ Create `~/.config/pr-review/config.json`:
   }
 }
 ```
+
+**Token resolution:** When accessing a repo, the app checks if the owner/org exists in the `tokens` map. If found, that token is used; otherwise falls back to `github_token`.
+
+**Auto-discovery:** If `repos` is not specified, the app auto-discovers all accessible repos from your tokens (archived repos are excluded).
 
 ### Notification Sound
 
@@ -118,86 +122,35 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 
 | Command | Description |
 |---------|-------------|
-| `:PRReview list` | Open floating window listing all PRs |
-| `:PRReview open {url}` | Clone/pull PR, enter review mode |
-| `:PRReview comments` | Show all comments in current PR |
-| `:PRReview submit` | Submit review (approve/request changes/comment) |
-| `:PRReview sync` | Force sync PR with remote (fetch latest commits) |
-| `:PRReview update` | Alias for sync |
-| `:PRReview refresh` | Alias for sync |
+| `:PRReview list` | Show all diffs and comments in current PR |
+| `:PRReview description` | Show PR description in floating window |
+| `:PRReview sync` | Force sync PR with remote (fetch latest) |
+| `:PRReview approve` | Approve PR (blocks if out of sync) |
 | `:PRReview close` | Exit review mode |
 | `:PRReview config` | Open config file for editing |
 
-**Auto-sync:** When a PR is open, it automatically syncs every 5 minutes to fetch new commits and comments.
-
-### PR List Window
-
-When viewing the PR list (`:PRReview list`):
-
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Navigate up/down |
-| `Enter` | Open selected PR |
-| `r` | Refresh list |
-| `q` / `Esc` | Close window |
+**Auto-sync:** When a PR is open, it automatically syncs every 5 minutes.
 
 ### Review Mode Keybindings
 
-> **Note:** `<leader>` is your Neovim leader key (default: `\`, commonly remapped to `<Space>`).
-
-**File Navigation:**
+Only 3 shortcuts to remember:
 
 | Key | Action |
 |-----|--------|
-| `]f` | Next file in PR |
-| `[f` | Previous file in PR |
+| `nn` | Next diff or comment (across all files) |
+| `pp` | Previous diff or comment (across all files) |
+| `cc` | Open/create comment at cursor |
 
-**Diff Navigation (within file):**
+**Navigation (`nn` / `pp`):**
+- Jumps to next/previous "point of interest" (diff hunk or comment)
+- Automatically switches files when needed
+- Wraps around at start/end of PR
 
-| Key | Action |
-|-----|--------|
-| `<leader>nd` | Next diff change |
-| `<leader>pd` | Previous diff change |
-
-**Comments:**
-
-| Key | Action |
-|-----|--------|
-| `cc` | Open comment thread (view/edit/add comments) |
-| `<leader>cc` | Quick new comment popup |
-| `<leader>nc` | Jump to next comment |
-| `<leader>pc` | Jump to previous comment |
-| `<leader>lc` | Open comment list |
-| `<leader>rc` | Resolve/unresolve comment |
-
-**Comment Thread View (`cc`):**
-
-Opens a floating window showing all comments on the current line:
-- Each comment shows author and content
-- Edit existing comments by modifying their text
-- Add new comments in the blank section at the bottom
-- Press `s` to save changes (update or create)
-- Press `q` or `Esc` to close
-
-**Quick Comment Popup (`<leader>cc`):**
-- Type your comment
-- Press `Esc` to exit insert mode
+**Comments (`cc`):**
+- Opens floating window showing all comments on the current line
+- If no comments exist, opens new comment editor
 - Press `s` to save and submit to GitHub
-- Press `q` to cancel
-
-**Review Submission:**
-
-| Key | Action |
-|-----|--------|
-| `<leader>rs` | Submit review (opens dialog) |
-| `<leader>ra` | Quick approve |
-| `<leader>ri` | Show review info/status |
-
-**Exit:**
-
-| Key | Action |
-|-----|--------|
-| `q` | Close review mode |
+- Press `q` or `Esc` to close
 
 ## Development
 

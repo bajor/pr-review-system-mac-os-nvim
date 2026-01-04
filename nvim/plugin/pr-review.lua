@@ -10,11 +10,11 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   local subcommand = args[1]
 
   if not subcommand then
-    vim.notify("Usage: :PRReview <description|comments|sync|approve|close>", vim.log.levels.WARN)
+    vim.notify("Usage: :PRReview <list|description|sync|approve|close>", vim.log.levels.WARN)
     return
   end
 
-  if subcommand == "comments" then
+  if subcommand == "list" then
     local pr_comments = require("pr-review.comments")
     pr_comments.list_comments()
   elseif subcommand == "description" or subcommand == "desc" then
@@ -72,7 +72,7 @@ end, {
     local args = vim.split(cmdline, "%s+")
     if #args == 2 then
       -- Complete subcommands
-      return { "description", "comments", "sync", "approve", "close", "config" }
+      return { "list", "description", "sync", "approve", "close", "config" }
     end
     return {}
   end,
