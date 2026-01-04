@@ -1,116 +1,90 @@
 # Agent Coding Guidelines
 
-## Core Principles
-
-1. **Plan before coding** — Use Plan mode for anything non-trivial
-2. **Type-level correctness** — Make invalid states irrepresentable
-3. **Test thoroughly** — Unit tests + E2E tests, happy paths + edge cases
-4. **Keep it simple** — KISS over clever; readable over compact
-5. **Minimize dependencies** — Every external library is a liability
-6. **Document architecture changes** — Create ARCHITECTURE_DIFF.md before PR
-7. **Verify before committing** — Tests and type checks must pass
+You are an AI coding agent. Follow these rules strictly. No exceptions without explicit human override.
 
 ---
 
-## 1. Plan Mode First
+## Quick Reference: Core Rules
 
-Use Plan mode before implementing features or making significant changes.
+| Rule | Summary |
+|------|---------|
+| Plan First | Plan before implementing anything non-trivial |
+| Type Safety | Make invalid states irrepresentable |
+| Test Everything | Unit + E2E, happy path + edge cases |
+| KISS | Simple beats clever; readable beats compact |
+| Minimal Dependencies | Every library is a liability |
+| Document Changes | ARCHITECTURE_DIFF.md for structural changes |
+| Update Docs | README and docs updated with every PR |
+| Verify Before Commit | `make test` must pass |
+| Verbose PRs | Teach, explain, include architecture context |
 
-**Always use Plan mode for:**
-- New features
-- Refactoring
-- Bug investigation
-- Multi-file changes
+---
 
-**Skip Plan mode only for:**
-- Single-line fixes
-- Typo corrections
-- Changes with explicit, unambiguous instructions
+## 1. Plan Before Coding
+
+**When to plan:** New features, refactoring, bug investigation, multi-file changes.
+
+**Skip only for:** Single-line fixes, typo corrections, explicit unambiguous instructions.
 
 ---
 
 ## 2. Type-Level Design
 
-Design types to catch errors at compile time, not runtime.
+Design types so the compiler catches errors, not runtime.
 
-**Principles:**
+**Do this:**
 - Make invalid states irrepresentable
 - Use sum types/enums over boolean flags
-- Prefer narrow types over broad ones (e.g., `UserId` over `string`)
+- Prefer narrow types (`UserId`) over broad types (`string`)
 - Encode invariants in the type system
-- Avoid `any`, `unknown`, or equivalent escape hatches unless absolutely necessary
 
-**Examples:**
+**Avoid:** `any`, `unknown`, or equivalent escape hatches.
 
+**Example - BAD:**
 ```typescript
-// BAD: Invalid states are representable
 type User = {
   isLoggedIn: boolean;
   authToken: string | null;  // Can have token while logged out
 }
+```
 
-// GOOD: Invalid states are irrepresentable
+**Example - GOOD:**
+```typescript
 type User = 
   | { status: 'anonymous' }
   | { status: 'authenticated'; authToken: string }
-```
-
-```rust
-// BAD: Runtime validation needed
-fn process_order(quantity: i32) { /* must check quantity > 0 */ }
-
-// GOOD: Compile-time guarantee
-fn process_order(quantity: NonZeroU32) { /* always valid */ }
 ```
 
 ---
 
 ## 3. Testing Strategy
 
-Every implementation requires both unit tests and E2E tests covering happy paths and edge cases.
-
-**Test coverage requirements:**
-- **Unit tests**: Test individual functions/modules in isolation
-- **E2E tests**: Test complete user flows and integrations
-- **Happy paths**: Expected inputs produce expected outputs
-- **Edge cases**: Boundaries, empty inputs, nulls, errors, concurrency
+Every implementation needs: unit tests + E2E tests + happy paths + edge cases.
 
 **Workflow:**
 1. Run `make test` before changes (baseline)
 2. Implement changes
-3. Write/update tests for new behavior
+3. Write/update tests
 4. Run `make test` after changes
-5. Fix any regressions
-6. All tests must pass before considering work complete
+5. Fix regressions
+6. All tests pass before work is complete
 
-**All verification runs through `make test`**, which must include:
-- Unit tests
-- E2E tests
-- Type checking (compiler/type checker)
-- Linting (for interpreted languages)
+**`make test` must include:** unit tests, E2E tests, type checking, linting.
 
-If `make test` doesn't exist or doesn't include all checks, fix it first.
+If `make test` is missing or incomplete, fix it first.
 
 ---
 
 ## 4. Type Checking and Linting
 
-Type checks and linters run on every verification cycle, not as an afterthought.
+Run on every verification cycle.
 
-**For compiled languages:**
-- Type checking is part of compilation
-- Ensure strict compiler flags are enabled
-- Zero warnings policy where feasible
+**Compiled languages:** Strict compiler flags, zero warnings policy.
 
-**For interpreted languages:**
-- Type checker must run (mypy, pyright, tsc, etc.)
-- Linter must run (eslint, ruff, clippy, etc.)
-- Both integrated into `make test`
+**Interpreted languages:** Type checker (mypy, pyright, tsc) + linter (eslint, ruff, clippy) integrated into `make test`.
 
-**Configuration examples:**
-
+**Example Makefile:**
 ```makefile
-# make test should include everything
 test:
 	npm run typecheck
 	npm run lint
@@ -118,37 +92,27 @@ test:
 	npm run test:e2e
 ```
 
-```makefile
-test:
-	mypy src/
-	ruff check src/
-	pytest tests/
-```
-
 ---
 
 ## 5. Architecture Documentation
 
-**When architecture changes, create `ARCHITECTURE_DIFF.md` before opening a PR.**
+**Trigger:** Any structural change to the codebase.
 
-This file documents what changed structurally and why. It exists for review purposes only.
-
-**Rules:**
-- Create `ARCHITECTURE_DIFF.md` in the repository root before creating a PR
-- If `ARCHITECTURE_DIFF.md` already exists from a previous change, delete it and replace with yours
-- Delete `ARCHITECTURE_DIFF.md` before merging the PR (it must not be merged into main)
-
-**What counts as an architecture change:**
+**What counts as architecture change:**
 - New modules or packages
 - Changed directory structure
 - New external services or integrations
 - Database schema changes
 - API contract changes
-- New dependencies that affect system design
-- Changes to data flow or control flow patterns
+- New dependencies affecting system design
+- Changes to data flow or control flow
+
+**Rules:**
+1. Create `ARCHITECTURE_DIFF.md` in repo root before PR
+2. Delete and replace if one exists from previous work
+3. Delete before merging (never merge this file into main)
 
 **Template:**
-
 ```markdown
 # Architecture Diff
 
@@ -178,20 +142,77 @@ Steps needed to transition from old to new.
 
 ---
 
-## 6. GitHub Actions CI
+## 6. Documentation Updates
 
-If the repository lacks GitHub Actions for PR checks, create them.
+**Rule: Every PR must update relevant documentation.**
+
+Mandatory, not optional. Documentation rot is a bug.
+
+**Always update:**
+- README.md if user-facing behavior changes
+- API docs if endpoints or contracts change
+- Setup/installation docs if dependencies or config change
+- Architecture docs if structure changes
+- Inline code comments if behavior is non-obvious
+
+**Test:** If a new developer reads only the docs, will they understand the current state? If no, fix the docs.
+
+---
+
+## 7. Pull Request Descriptions
+
+**PR descriptions must be verbose, explanatory, and written in a teaching style.**
+
+Goal: A reviewer should understand WHAT changed, WHY, HOW it works, and what trade-offs were made.
+
+**Required sections:**
+
+### Summary
+What this PR does in 1-2 sentences.
+
+### Motivation
+Why this change is needed. What problem it solves.
+
+### Implementation Details
+How the solution works. Walk through key changes. Explain non-obvious decisions.
+
+### Architecture Changes (if applicable)
+Include the full content of ARCHITECTURE_DIFF.md here. Do not just link to it.
+
+### Testing
+What tests were added or modified. How to verify the change works.
+
+### Trade-offs and Alternatives Considered
+What other approaches were evaluated. Why this one was chosen.
+
+### Comprehension Questions
+At the bottom of every PR, include 1-3 questions to verify the reviewer understands the change.
+
+**Example:**
+```markdown
+## Comprehension Check
+
+1. Why did we choose a mutex over a RwLock for the cache invalidation?
+2. What would break if we removed the `NonZeroU32` constraint on `quantity`?
+3. How does the new retry logic differ from the previous implementation?
+```
+
+**Purpose:** Forces identification of key concepts, helps reviewers focus, creates teaching moments, catches PRs where even the author can't explain the change.
+
+---
+
+## 8. GitHub Actions CI
+
+If the repo lacks CI, create it.
 
 **Requirements:**
-- Triggered on pull requests only (not pushes to main)
-- Must run the full `make test` suite
-- Must include type checking and linting
-- PRs cannot merge with failing checks
+- Trigger on pull requests only
+- Run full `make test` suite
+- Include type checking and linting
+- Block merge on failure
 
 **Minimal workflow:**
-
 ```yaml
-# .github/workflows/ci.yml
 name: CI
 
 on:
@@ -203,110 +224,86 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup # (language-specific setup)
-        # ...
-      
       - name: Install dependencies
-        run: make install  # or equivalent
-      
+        run: make install
       - name: Run all checks
         run: make test
 ```
 
-**After creating or modifying CI:**
-- Push changes to a branch
-- Open a PR
-- Verify the workflow triggers and passes
-- Do not merge until CI is green
-
 ---
 
-## 7. Code Simplicity (KISS)
+## 9. Code Simplicity (KISS)
 
-Never overcomplicate. Simple and readable beats clever and compact.
+Simple and readable beats clever and compact.
 
 **Rules:**
 - Write code a junior developer can understand
 - One level of abstraction per function
-- Avoid premature optimization
-- Avoid premature abstraction
+- No premature optimization
+- No premature abstraction
 - If you need a comment to explain what code does, rewrite the code
-- Prefer explicit over implicit
-- Prefer boring technology over exciting technology
+- Explicit over implicit
+- Boring technology over exciting technology
 
-**Red flags — stop and simplify if you see:**
+**Red flags - stop and simplify:**
 - Functions over 30 lines
 - More than 3 levels of nesting
-- Clever one-liners that require thought to parse
+- Clever one-liners requiring thought to parse
 - Abstractions with only one implementation
 - "Flexible" code for hypothetical future requirements
 
 ---
 
-## 8. Minimal Dependencies
+## 10. Minimal Dependencies
 
-Every external dependency is a liability: security risk, maintenance burden, potential breakage.
+Every external dependency is a liability.
 
-**Before adding a dependency, ask:**
-1. Can this be implemented in <50 lines of code?
-2. Is this a core, well-maintained library (not abandoned)?
-3. Does the dependency tree stay small?
-4. Is the license compatible?
+**Before adding a dependency, verify:**
+1. Cannot be implemented in <50 lines
+2. Core, actively maintained library
+3. Small dependency tree
+4. Compatible license
 
-**Prefer:**
-- Standard library over external packages
-- Single-purpose libraries over frameworks
-- Vendoring small utilities over adding dependencies
-- No dependency over any dependency
+**Prefer:** Standard library > single-purpose library > framework > no dependency.
 
-**Dependency audit:** If a feature requires pulling in 5+ transitive dependencies, reconsider the approach.
+**If a feature requires 5+ transitive dependencies, reconsider the approach.**
 
 ---
 
-## 9. Code Review
+## 11. Code Review
 
-Use `/code-review` on all non-trivial PRs. Apply the same standards to AI-generated and human code.
+Run code review on all non-trivial PRs.
 
 **Workflow:**
 1. Complete implementation
 2. Ensure `make test` passes
 3. Commit and push
-4. Create PR
-5. Run `/code-review`
-6. Address issues with confidence >= 80
+4. Create PR (with verbose description and comprehension questions)
+5. Run code review
+6. Address issues with high confidence
 7. Re-run if significant changes made
 
 ---
 
-## 10. Commit Discipline
+## 12. Commit Discipline
 
-Commit when work is complete and verified. Never leave work uncommitted.
+Commit when work is complete and verified.
 
-**Before committing (if not on main/master):**
-1. Fetch latest changes from origin
-2. Rebase or merge main/master into your branch
-3. Resolve all conflicts
-4. Re-run `make test` after resolving conflicts
-5. Only then proceed to commit
-
-**When to commit:**
-- After completing a feature or fix
-- After `make test` passes
-- Before switching tasks
-- At natural breakpoints in larger work
+**Before committing (if on feature branch):**
+1. Fetch latest from origin
+2. Rebase or merge main/master
+3. Resolve conflicts
+4. Re-run `make test`
+5. Commit
 
 **Commit message format:**
-
 ```bash
-# Simple commits
 git commit -m "Add user authentication endpoint"
 
-# With details (use multiple -m flags, not heredocs)
-git commit -m "Fix race condition in cache invalidation" -m "The previous implementation could serve stale data when concurrent requests triggered invalidation. Now using mutex to serialize cache updates."
+git commit -m "Fix race condition in cache invalidation" -m "Previous implementation could serve stale data during concurrent invalidation. Now using mutex to serialize cache updates."
 ```
 
-**Never use heredocs in commit commands** — they fail in sandboxed environments.
+**Never use heredocs in commit commands** - they fail in sandboxed environments.
 
 ---
 
@@ -314,16 +311,20 @@ git commit -m "Fix race condition in cache invalidation" -m "The previous implem
 
 Before marking any task complete:
 
-- [ ] Plan mode used (if non-trivial)
-- [ ] Types designed to prevent invalid states
+- [ ] Planning done (if non-trivial)
+- [ ] Types prevent invalid states
 - [ ] Unit tests written (happy path + edge cases)
 - [ ] E2E tests written (happy path + edge cases)
-- [ ] `make test` passes (tests + types + lint)
-- [ ] GitHub Actions CI exists and passes on PR
+- [ ] `make test` passes
+- [ ] GitHub Actions CI exists and passes
 - [ ] Code is simple and readable
-- [ ] No unnecessary dependencies added
-- [ ] `ARCHITECTURE_DIFF.md` created (if architecture changed)
+- [ ] No unnecessary dependencies
+- [ ] README and docs updated
+- [ ] ARCHITECTURE_DIFF.md created (if architecture changed)
+- [ ] PR description is verbose and explanatory
+- [ ] PR includes ARCHITECTURE_DIFF.md content (if created)
+- [ ] PR includes 1-3 comprehension questions
 - [ ] Code review completed
-- [ ] Branch updated with latest main/master (if on feature branch)
+- [ ] Branch updated with latest main/master
 - [ ] Changes committed with clear message
-- [ ] `ARCHITECTURE_DIFF.md` removed before merge (if created)
+- [ ] ARCHITECTURE_DIFF.md removed before merge
