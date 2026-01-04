@@ -172,10 +172,11 @@ local function sync_pr(silent)
   end
 
   local branch = pr.head.ref
-  local repo_url = string.format("https://%s@github.com/%s/%s.git", cfg.github_token, owner, repo)
+  local token = config.get_token_for_owner(cfg, owner)
+  local repo_url = string.format("https://%s@github.com/%s/%s.git", token, owner, repo)
 
   -- Check remote for updates first
-  api.get_pr(owner, repo, number, cfg.github_token, function(new_pr, pr_err)
+  api.get_pr(owner, repo, number, token, function(new_pr, pr_err)
     if pr_err then
       if not silent then
         notify_error("Sync failed: " .. pr_err)
@@ -210,7 +211,7 @@ local function sync_pr(silent)
       last_known_sha = new_sha
 
       -- Re-fetch files
-      api.get_pr_files(owner, repo, number, cfg.github_token, function(files, files_err)
+      api.get_pr_files(owner, repo, number, token, function(files, files_err)
         if files_err then
           notify_error("Failed to fetch files: " .. files_err)
           return
@@ -224,7 +225,7 @@ local function sync_pr(silent)
         end
 
         -- Re-fetch review comments
-        api.get_pr_comments(owner, repo, number, cfg.github_token, function(new_comments, comments_err)
+        api.get_pr_comments(owner, repo, number, token, function(new_comments, comments_err)
           if not comments_err then
             for _, comment in ipairs(new_comments or {}) do
               if comment.path then
@@ -236,7 +237,7 @@ local function sync_pr(silent)
           end
 
           -- Also fetch issue comments
-          api.get_issue_comments(owner, repo, number, cfg.github_token, function(issue_comments, issue_err)
+          api.get_issue_comments(owner, repo, number, token, function(issue_comments, issue_err)
             if not issue_err then
               for _, comment in ipairs(issue_comments or {}) do
                 local body = comment.body or ""
@@ -348,10 +349,13 @@ function M.open_pr(url)
     clone_path = clone_path,
   })
 
+  -- Resolve token for this owner
+  local token = config.get_token_for_owner(cfg, owner)
+
   notify_loading(string.format("Opening PR #%d from %s/%s...", number, owner, repo))
 
   -- First, fetch PR data to get the branch name
-  api.get_pr(owner, repo, number, cfg.github_token, function(pr, pr_err)
+  api.get_pr(owner, repo, number, token, function(pr, pr_err)
     if pr_err then
       notify_error("Failed to fetch PR: " .. pr_err)
       state.reset()
@@ -362,7 +366,7 @@ function M.open_pr(url)
 
     local branch = pr.head.ref
     -- Use token in URL for HTTPS authentication
-    local repo_url = string.format("https://%s@github.com/%s/%s.git", cfg.github_token, owner, repo)
+    local repo_url = string.format("https://%s@github.com/%s/%s.git", token, owner, repo)
 
     -- Clone or update the repo
     prepare_repo(clone_path, repo_url, branch, function(repo_err)
@@ -373,7 +377,7 @@ function M.open_pr(url)
       end
 
       -- Fetch files and comments
-      fetch_pr_data(owner, repo, number, cfg.github_token, function(data_err)
+      fetch_pr_data(owner, repo, number, token, function(data_err)
         if data_err then
           notify_error("Failed to fetch PR data: " .. data_err)
           state.reset()

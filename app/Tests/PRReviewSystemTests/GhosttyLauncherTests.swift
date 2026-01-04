@@ -5,23 +5,30 @@ import Testing
 @Suite("GhosttyLauncher Tests")
 struct GhosttyLauncherTests {
 
-    @Test("Can be initialized with paths")
-    func initWithPaths() {
-        let launcher = GhosttyLauncher(
-            ghosttyPath: "/Applications/Ghostty.app",
-            nvimPath: "/opt/homebrew/bin/nvim",
-            cloneRoot: "~/.local/share/pr-review/repos",
-            githubToken: "ghp_test"
-        )
-        #expect(type(of: launcher) == GhosttyLauncher.self)
-    }
-
     @Test("Can be initialized from config")
     func initFromConfig() {
         let config = Config(
             githubToken: "test",
             githubUsername: "user",
             repos: ["owner/repo"],
+            tokens: [:],
+            cloneRoot: "/tmp/test",
+            pollIntervalSeconds: 300,
+            ghosttyPath: "/Applications/Ghostty.app",
+            nvimPath: "/opt/homebrew/bin/nvim",
+            notifications: NotificationConfig()
+        )
+        let launcher = GhosttyLauncher(config: config)
+        #expect(type(of: launcher) == GhosttyLauncher.self)
+    }
+
+    @Test("Can be initialized with multi-token config")
+    func initWithMultiTokenConfig() {
+        let config = Config(
+            githubToken: "default-token",
+            githubUsername: "user",
+            repos: ["owner/repo", "org/repo"],
+            tokens: ["org": "org-specific-token"],
             cloneRoot: "/tmp/test",
             pollIntervalSeconds: 300,
             ghosttyPath: "/Applications/Ghostty.app",

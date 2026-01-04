@@ -14,9 +14,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationManager.shared
     }()
 
-    /// GitHub API client
-    private var githubAPI: GitHubAPI?
-
     /// Current configuration
     private var config: Config?
 
@@ -91,7 +88,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func loadConfiguration() {
         do {
             config = try ConfigLoader.load()
-            githubAPI = GitHubAPI(token: config!.githubToken)
             launcher = GhosttyLauncher(config: config!)
             cleanupService = CleanupService(config: config!)
 
@@ -105,6 +101,63 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 body: "Failed to load configuration: \(error.localizedDescription)"
             )
         }
+    }
+
+    /// Create a GitHub API client for the given owner/org
+    /// Uses the owner-specific token if configured, otherwise the default token
+    private func api(for owner: String) -> GitHubAPI? {
+        guard let config = config else { return nil }
+        let token = config.resolveToken(for: owner)
+        return GitHubAPI(token: token)
+    }
+
+    /// Discover all repos accessible by configured tokens
+    /// Returns array of "owner/repo" strings
+    private func discoverRepos() async -> [String] {
+        guard let config = config else { return [] }
+
+        var discoveredRepos: Set<String> = []
+
+        // Discover repos from each token in the tokens map
+        await withTaskGroup(of: [String].self) { group in
+            for (_, token) in config.tokens {
+                group.addTask {
+                    let api = GitHubAPI(token: token)
+                    do {
+                        let repos = try await api.listRepos()
+                        return repos.map { $0.fullName }
+                    } catch {
+                        print("Error discovering repos: \(error)")
+                        return []
+                    }
+                }
+            }
+
+            // Also check default token if not empty and not already in tokens
+            if !config.githubToken.isEmpty {
+                let tokenAlreadyUsed = config.tokens.values.contains(config.githubToken)
+                if !tokenAlreadyUsed {
+                    group.addTask {
+                        let api = GitHubAPI(token: config.githubToken)
+                        do {
+                            let repos = try await api.listRepos()
+                            return repos.map { $0.fullName }
+                        } catch {
+                            print("Error discovering repos with default token: \(error)")
+                            return []
+                        }
+                    }
+                }
+            }
+
+            for await repos in group {
+                for repo in repos {
+                    discoveredRepos.insert(repo)
+                }
+            }
+        }
+
+        return Array(discoveredRepos).sorted()
     }
 
     private func runCleanupIfNeeded() {
@@ -133,9 +186,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startPolling() {
-        guard let api = githubAPI, let config = config else { return }
+        guard let config = config else { return }
 
-        poller = PRPoller(api: api, config: config)
+        poller = PRPoller(config: config)
         poller?.startPolling { [weak self] changes in
             self?.handlePRChanges(changes)
         }
@@ -249,19 +302,31 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Pull Request Fetching
 
     private func refreshPullRequests() async {
-        guard let config = config, let api = githubAPI else {
+        guard let config = config else {
             return
+        }
+
+        // Determine which repos to check - use config.repos if specified, otherwise auto-discover
+        let reposToCheck: [String]
+        if config.repos.isEmpty {
+            reposToCheck = await discoverRepos()
+            print("Auto-discovered \(reposToCheck.count) repos")
+        } else {
+            reposToCheck = config.repos
         }
 
         // Fetch all repos in parallel
         let allPRs = await withTaskGroup(of: (String, [PRDisplayInfo])?.self) { group in
-            for repo in config.repos {
-                group.addTask {
+            for repo in reposToCheck {
+                group.addTask { [self] in
                     // Parse owner/repo from the repo string
                     let parts = repo.split(separator: "/")
                     guard parts.count == 2 else { return nil }
                     let owner = String(parts[0])
                     let repoName = String(parts[1])
+
+                    // Get API with owner-specific token
+                    guard let api = self.api(for: owner) else { return nil }
 
                     do {
                         let prs = try await api.listPRs(owner: owner, repo: repoName)
@@ -299,6 +364,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let owner = String(parts[0])
             let repoName = String(parts[1])
 
+            // Get API with owner-specific token
+            guard let api = api(for: owner) else { continue }
+
             for prInfo in prInfos {
                 // Fetch commit message
                 Task {
@@ -332,7 +400,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Fetch check status for a single PR
     private func fetchCheckStatus(for pr: PullRequest, in repo: String, owner: String, repoName: String) async {
-        guard let api = githubAPI else { return }
+        guard let api = api(for: owner) else { return }
 
         do {
             let status = try await api.getCheckStatus(owner: owner, repo: repoName, ref: pr.head.sha)
@@ -371,7 +439,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Poll check statuses for PRs with pending checks
     private func pollPendingCheckStatuses() async {
-        guard githubAPI != nil else { return }
+        guard config != nil else { return }
 
         let pendingPRs = await MainActor.run {
             menuBarController.getPRsWithPendingChecks()

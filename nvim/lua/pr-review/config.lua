@@ -1,7 +1,8 @@
 ---@class PRReviewConfig
----@field github_token string GitHub personal access token
+---@field github_token string GitHub personal access token (default/fallback)
 ---@field github_username string GitHub username
 ---@field repos string[] List of repos to watch (format: "owner/repo")
+---@field tokens? table<string, string> Per-owner/org tokens (owner -> token)
 ---@field clone_root string Root directory for cloned PR repos
 ---@field poll_interval_seconds number Polling interval in seconds
 ---@field ghostty_path string Path to Ghostty.app
@@ -20,6 +21,7 @@ M.defaults = {
   github_token = "",
   github_username = "",
   repos = {},
+  tokens = {},
   clone_root = "~/.local/share/pr-review/repos",
   poll_interval_seconds = 300,
   ghostty_path = "/Applications/Ghostty.app",
@@ -156,6 +158,31 @@ function M.create_default()
   file:close()
 
   return true, nil
+end
+
+--- Get the appropriate token for a given owner/org
+--- Returns the owner-specific token if available, otherwise the default github_token
+---@param config PRReviewConfig
+---@param owner string
+---@return string
+function M.get_token_for_owner(config, owner)
+  if config.tokens and config.tokens[owner] then
+    return config.tokens[owner]
+  end
+  return config.github_token
+end
+
+--- Get the appropriate token for a repo string ("owner/repo")
+--- Extracts owner from the repo string and resolves the token
+---@param config PRReviewConfig
+---@param repo string Repository in "owner/repo" format
+---@return string
+function M.get_token_for_repo(config, repo)
+  local owner = repo:match("^([^/]+)/")
+  if not owner then
+    return config.github_token
+  end
+  return M.get_token_for_owner(config, owner)
 end
 
 return M

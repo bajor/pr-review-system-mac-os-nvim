@@ -11,6 +11,7 @@ struct PRPollerTests {
             githubToken: "test-token",
             githubUsername: "testuser",
             repos: ["owner/repo"],
+            tokens: [:],
             cloneRoot: "/tmp/test",
             pollIntervalSeconds: 60,
             ghosttyPath: "/Applications/Ghostty.app",
@@ -21,27 +22,24 @@ struct PRPollerTests {
 
     @Test("Can be initialized")
     func initialization() {
-        let api = GitHubAPI(token: "test")
         let config = makeConfig()
-        let poller = PRPoller(api: api, config: config)
+        let poller = PRPoller(config: config)
 
         #expect(poller.isPolling == false)
     }
 
     @Test("isPolling is initially false")
     func initialPollingState() {
-        let api = GitHubAPI(token: "test")
         let config = makeConfig()
-        let poller = PRPoller(api: api, config: config)
+        let poller = PRPoller(config: config)
 
         #expect(poller.isPolling == false)
     }
 
     @Test("clearState removes cached state")
     func clearState() {
-        let api = GitHubAPI(token: "test")
         let config = makeConfig()
-        let poller = PRPoller(api: api, config: config)
+        let poller = PRPoller(config: config)
 
         // This should not throw
         poller.clearState()
@@ -50,9 +48,8 @@ struct PRPollerTests {
 
     @Test("stopPolling can be called when not polling")
     func stopPollingWhenNotPolling() {
-        let api = GitHubAPI(token: "test")
         let config = makeConfig()
-        let poller = PRPoller(api: api, config: config)
+        let poller = PRPoller(config: config)
 
         // Should not throw
         poller.stopPolling()

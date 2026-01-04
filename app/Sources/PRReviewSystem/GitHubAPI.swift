@@ -37,6 +37,12 @@ public actor GitHubAPI {
 
     // MARK: - Public API
 
+    /// List all repositories accessible to the authenticated user
+    func listRepos() async throws -> [Repository] {
+        let url = "\(Self.baseURL)/user/repos?per_page=100&affiliation=owner,collaborator,organization_member&visibility=all"
+        return try await fetchAllPages(url: url)
+    }
+
     /// List open pull requests for a repository
     func listPRs(owner: String, repo: String) async throws -> [PullRequest] {
         let url = "\(Self.baseURL)/repos/\(owner)/\(repo)/pulls?state=open&per_page=100"

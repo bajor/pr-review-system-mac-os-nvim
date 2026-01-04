@@ -5,35 +5,13 @@ import Foundation
 public final class GhosttyLauncher {
     // MARK: - Properties
 
-    /// Path to Ghostty application
-    private let ghosttyPath: String
-
-    /// Path to Neovim executable
-    private let nvimPath: String
-
-    /// Root directory for PR clones
-    private let cloneRoot: String
-
-    /// GitHub token for authentication
-    private let githubToken: String
+    /// Configuration (used for paths and token resolution)
+    private let config: Config
 
     // MARK: - Initialization
 
-    public init(ghosttyPath: String, nvimPath: String, cloneRoot: String, githubToken: String) {
-        self.ghosttyPath = ghosttyPath
-        self.nvimPath = nvimPath
-        self.cloneRoot = cloneRoot
-        self.githubToken = githubToken
-    }
-
-    /// Initialize from configuration
-    public convenience init(config: Config) {
-        self.init(
-            ghosttyPath: config.ghosttyPath,
-            nvimPath: config.nvimPath,
-            cloneRoot: config.cloneRoot,
-            githubToken: config.githubToken
-        )
+    public init(config: Config) {
+        self.config = config
     }
 
     // MARK: - Public API
@@ -45,6 +23,7 @@ public final class GhosttyLauncher {
     ///   - repo: Repository name
     public func openPR(_ pr: PullRequest, owner: String, repo: String) async throws {
         // Expand clone root (handle ~)
+        let cloneRoot = config.cloneRoot
         let expandedCloneRoot: String
         if cloneRoot.hasPrefix("~") {
             let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -65,8 +44,9 @@ public final class GhosttyLauncher {
             try fileManager.createDirectory(at: parentURL, withIntermediateDirectories: true)
         }
 
-        // Clone or update the repository (with token for authentication)
-        let repoURL = "https://\(githubToken)@github.com/\(owner)/\(repo).git"
+        // Clone or update the repository (with owner-specific token for authentication)
+        let token = config.resolveToken(for: owner)
+        let repoURL = "https://\(token)@github.com/\(owner)/\(repo).git"
         let branch = pr.head.ref
 
         if GitOperations.isGitRepo(at: clonePath) {
@@ -96,6 +76,7 @@ public final class GhosttyLauncher {
     /// Launch Ghostty with Neovim configured for PR review
     private func launchGhostty(withPRURL prURL: String, workingDirectory: String?) async throws {
         // Get the Ghostty CLI binary path
+        let ghosttyPath = config.ghosttyPath
         let ghosttyBinary: String
         if ghosttyPath.hasSuffix(".app") {
             ghosttyBinary = "\(ghosttyPath)/Contents/MacOS/ghostty"
@@ -109,6 +90,7 @@ public final class GhosttyLauncher {
         }
 
         // Build the shell command to execute inside Ghostty
+        let nvimPath = config.nvimPath
         let shellCommand: String
         if let dir = workingDirectory {
             // cd to directory and run nvim with PRReview command

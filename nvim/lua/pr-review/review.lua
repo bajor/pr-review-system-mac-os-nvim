@@ -33,16 +33,13 @@ function M.submit_review(event, body, callback)
   local owner = state.get_owner()
   local repo = state.get_repo()
   local number = state.get_number()
+  local token = config.get_token_for_owner(cfg, owner)
 
   -- Get pending comments
   local pending = comments.get_pending_comments()
 
   -- Submit review with comments
-  api.submit_review(owner, repo, number, cfg.github_token, {
-    event = event,
-    body = body,
-    comments = pending,
-  }, function(result, err)
+  api.submit_review(owner, repo, number, event, body, token, function(result, err)
     if err then
       callback(err)
     else

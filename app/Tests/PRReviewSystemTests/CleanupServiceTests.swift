@@ -20,6 +20,7 @@ struct CleanupServiceTests {
             githubToken: "test",
             githubUsername: "user",
             repos: ["owner/repo"],
+            tokens: [:],
             cloneRoot: "/tmp/test",
             pollIntervalSeconds: 300,
             ghosttyPath: "/Applications/Ghostty.app",

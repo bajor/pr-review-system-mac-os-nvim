@@ -90,8 +90,8 @@ struct ConfigLoaderTests {
         }
     }
 
-    @Test("Returns error when repos is empty")
-    func emptyRepos() throws {
+    @Test("Allows empty repos for auto-discovery")
+    func emptyReposAllowed() throws {
         let json = """
         {
             "github_token": "ghp_xxx",
@@ -104,9 +104,9 @@ struct ConfigLoaderTests {
         try json.write(to: tmpFile, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        #expect(throws: ConfigError.emptyRepos) {
-            try ConfigLoader.load(from: tmpFile.path)
-        }
+        // Empty repos is now valid - allows auto-discovery
+        let config = try ConfigLoader.load(from: tmpFile.path)
+        #expect(config.repos.isEmpty)
     }
 
     @Test("Returns error for invalid repo format")
@@ -199,7 +199,6 @@ struct ConfigErrorTests {
             .invalidJSON(message: "test error"),
             .missingRequiredField(name: "test_field"),
             .invalidRepoFormat(repo: "invalid"),
-            .emptyRepos,
         ]
 
         for error in errors {

@@ -378,6 +378,7 @@ function M.show_comment_thread()
     local repo = state.get_repo()
     local number = state.get_number()
     local pr = state.get_pr()
+    local token = config.get_token_for_owner(cfg, owner)
 
     if section.type == "new" then
       -- Get all lines from new_comment_start to end
@@ -417,7 +418,7 @@ function M.show_comment_thread()
         line = current_line,
         commit_id = pr.head.sha,
         side = "RIGHT",
-      }, cfg.github_token, function(result, err)
+      }, token, function(result, err)
         vim.schedule(function()
           if err then
             if err:find("422") then
@@ -425,7 +426,7 @@ function M.show_comment_thread()
               vim.notify("Line not in diff, submitting as PR comment...", vim.log.levels.INFO)
               local formatted_body = string.format("**`%s:%d`**\n\n%s", path, current_line, body)
 
-              api.create_issue_comment(owner, repo, number, formatted_body, cfg.github_token, function(issue_result, issue_err)
+              api.create_issue_comment(owner, repo, number, formatted_body, token, function(issue_result, issue_err)
                 vim.schedule(function()
                   if issue_err then
                     vim.notify("Failed: " .. issue_err, vim.log.levels.ERROR)
@@ -463,7 +464,7 @@ function M.show_comment_thread()
 
       vim.notify("Updating comment...", vim.log.levels.INFO)
 
-      api.update_comment(owner, repo, comment.id, body, cfg.github_token, function(result, err)
+      api.update_comment(owner, repo, comment.id, body, token, function(result, err)
         vim.schedule(function()
           if err then
             vim.notify("Failed: " .. err, vim.log.levels.ERROR)
@@ -558,6 +559,7 @@ function M.create_comment()
     local repo = state.get_repo()
     local number = state.get_number()
     local pr = state.get_pr()
+    local token = config.get_token_for_owner(cfg, owner)
 
     if not pr or not pr.head or not pr.head.sha then
       vim.notify("Missing PR data (commit_id)", vim.log.levels.ERROR)
@@ -608,7 +610,7 @@ function M.create_comment()
       line = line,
       commit_id = pr.head.sha,
       side = "RIGHT",
-    }, cfg.github_token, function(result, err)
+    }, token, function(result, err)
       vim.schedule(function()
         if err then
           -- Check if it's a 422 error (line not in diff)
@@ -617,7 +619,7 @@ function M.create_comment()
             vim.notify("Line not in diff, submitting as PR comment...", vim.log.levels.INFO)
             local formatted_body = string.format("**`%s:%d`**\n\n%s", path, line, body)
 
-            api.create_issue_comment(owner, repo, number, formatted_body, cfg.github_token, function(issue_result, issue_err)
+            api.create_issue_comment(owner, repo, number, formatted_body, token, function(issue_result, issue_err)
               vim.schedule(function()
                 if issue_err then
                   vim.notify("Failed to submit: " .. issue_err, vim.log.levels.ERROR)
@@ -782,6 +784,7 @@ function M.submit_comments(callback)
   local repo = state.get_repo()
   local number = state.get_number()
   local pr = state.get_pr()
+  local token = config.get_token_for_owner(cfg, owner)
 
   if not pr or not pr.head or not pr.head.sha then
     callback("Missing PR data (commit_id)")
@@ -799,7 +802,7 @@ function M.submit_comments(callback)
       body = comment.body,
       commit_id = pr.head.sha,
       side = "RIGHT",
-    }, cfg.github_token, function(result, err)
+    }, token, function(result, err)
       submitted_count = submitted_count + 1
       if err then
         table.insert(errors, err)

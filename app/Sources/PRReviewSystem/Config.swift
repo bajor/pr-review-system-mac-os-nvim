@@ -2,7 +2,7 @@ import Foundation
 
 /// Configuration for PR Review System
 public struct Config: Codable, Equatable, Sendable {
-    /// GitHub personal access token
+    /// GitHub personal access token (default/fallback token)
     public let githubToken: String
 
     /// GitHub username
@@ -10,6 +10,10 @@ public struct Config: Codable, Equatable, Sendable {
 
     /// List of repos to watch (format: "owner/repo")
     public let repos: [String]
+
+    /// Per-owner/org tokens (owner name -> token)
+    /// If a repo's owner is in this map, use that token; otherwise use githubToken
+    public let tokens: [String: String]
 
     /// Root directory for cloned PR repos
     public let cloneRoot: String
@@ -31,6 +35,7 @@ public struct Config: Codable, Equatable, Sendable {
         githubToken: "",
         githubUsername: "",
         repos: [],
+        tokens: [:],
         cloneRoot: "~/.local/share/pr-review/repos",
         pollIntervalSeconds: 300,
         ghosttyPath: "/Applications/Ghostty.app",
@@ -38,11 +43,18 @@ public struct Config: Codable, Equatable, Sendable {
         notifications: NotificationConfig.defaults
     )
 
+    /// Resolve the appropriate token for a given owner/org
+    /// Returns the owner-specific token if available, otherwise the default githubToken
+    public func resolveToken(for owner: String) -> String {
+        tokens[owner] ?? githubToken
+    }
+
     /// Coding keys for JSON mapping (snake_case to camelCase)
     enum CodingKeys: String, CodingKey {
         case githubToken = "github_token"
         case githubUsername = "github_username"
         case repos
+        case tokens
         case cloneRoot = "clone_root"
         case pollIntervalSeconds = "poll_interval_seconds"
         case ghosttyPath = "ghostty_path"
@@ -56,7 +68,10 @@ public struct Config: Codable, Equatable, Sendable {
 
         githubToken = try container.decode(String.self, forKey: .githubToken)
         githubUsername = try container.decode(String.self, forKey: .githubUsername)
-        repos = try container.decode([String].self, forKey: .repos)
+        repos = try container.decodeIfPresent([String].self, forKey: .repos)
+            ?? Config.defaults.repos
+        tokens = try container.decodeIfPresent([String: String].self, forKey: .tokens)
+            ?? Config.defaults.tokens
         cloneRoot = try container.decodeIfPresent(String.self, forKey: .cloneRoot)
             ?? Config.defaults.cloneRoot
         pollIntervalSeconds = try container.decodeIfPresent(Int.self, forKey: .pollIntervalSeconds)
@@ -74,6 +89,7 @@ public struct Config: Codable, Equatable, Sendable {
         githubToken: String,
         githubUsername: String,
         repos: [String],
+        tokens: [String: String],
         cloneRoot: String,
         pollIntervalSeconds: Int,
         ghosttyPath: String,
@@ -83,6 +99,7 @@ public struct Config: Codable, Equatable, Sendable {
         self.githubToken = githubToken
         self.githubUsername = githubUsername
         self.repos = repos
+        self.tokens = tokens
         self.cloneRoot = cloneRoot
         self.pollIntervalSeconds = pollIntervalSeconds
         self.ghosttyPath = ghosttyPath
@@ -147,7 +164,6 @@ enum ConfigError: Error, Equatable, CustomStringConvertible {
     case invalidJSON(message: String)
     case missingRequiredField(name: String)
     case invalidRepoFormat(repo: String)
-    case emptyRepos
 
     var description: String {
         switch self {
@@ -159,8 +175,6 @@ enum ConfigError: Error, Equatable, CustomStringConvertible {
             "\(name) is required"
         case let .invalidRepoFormat(repo):
             "Invalid repo format: '\(repo)' (expected 'owner/repo')"
-        case .emptyRepos:
-            "repos must be a non-empty array"
         }
     }
 }
@@ -229,6 +243,7 @@ enum ConfigLoader {
             githubToken: config.githubToken,
             githubUsername: config.githubUsername,
             repos: config.repos,
+            tokens: config.tokens,
             cloneRoot: expandPath(config.cloneRoot),
             pollIntervalSeconds: config.pollIntervalSeconds,
             ghosttyPath: expandPath(config.ghosttyPath),
@@ -239,18 +254,15 @@ enum ConfigLoader {
 
     /// Validate configuration
     private static func validate(_ config: Config) throws {
-        if config.githubToken.isEmpty {
-            throw ConfigError.missingRequiredField(name: "github_token")
+        if config.githubToken.isEmpty && config.tokens.isEmpty {
+            throw ConfigError.missingRequiredField(name: "github_token or tokens")
         }
 
         if config.githubUsername.isEmpty {
             throw ConfigError.missingRequiredField(name: "github_username")
         }
 
-        if config.repos.isEmpty {
-            throw ConfigError.emptyRepos
-        }
-
+        // Validate repo format if repos are specified
         for repo in config.repos {
             if !isValidRepoFormat(repo) {
                 throw ConfigError.invalidRepoFormat(repo: repo)
