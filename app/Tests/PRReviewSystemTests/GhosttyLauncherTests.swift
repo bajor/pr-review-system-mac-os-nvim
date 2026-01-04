@@ -10,7 +10,8 @@ struct GhosttyLauncherTests {
         let launcher = GhosttyLauncher(
             ghosttyPath: "/Applications/Ghostty.app",
             nvimPath: "/opt/homebrew/bin/nvim",
-            cloneRoot: "~/.local/share/pr-review/repos"
+            cloneRoot: "~/.local/share/pr-review/repos",
+            githubToken: "ghp_test"
         )
         #expect(type(of: launcher) == GhosttyLauncher.self)
     }

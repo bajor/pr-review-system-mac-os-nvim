@@ -62,10 +62,4 @@ struct NotificationNamesTests {
         let name = Notification.Name.refreshRequested
         #expect(name.rawValue == "PRReviewSystem.refreshRequested")
     }
-
-    @Test("preferencesRequested notification name exists")
-    func preferencesRequestedName() {
-        let name = Notification.Name.preferencesRequested
-        #expect(name.rawValue == "PRReviewSystem.preferencesRequested")
-    }
 }
