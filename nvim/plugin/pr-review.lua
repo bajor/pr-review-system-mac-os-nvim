@@ -14,7 +14,16 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
     return
   end
 
-  if subcommand == "list" then
+  if subcommand == "open" then
+    -- Internal command used by macOS app to open PRs
+    local url = args[2]
+    if not url then
+      vim.notify("Usage: :PRReview open <url>", vim.log.levels.WARN)
+      return
+    end
+    local pr_open = require("pr-review.open")
+    pr_open.open_pr(url)
+  elseif subcommand == "list" then
     local pr_comments = require("pr-review.comments")
     pr_comments.list_comments()
   elseif subcommand == "description" or subcommand == "desc" then

@@ -55,7 +55,7 @@ describe("pr-review.config", function()
       os.remove(tmpfile)
     end)
 
-    it("returns error when github_token is missing", function()
+    it("returns error when github_token and tokens are missing", function()
       local tmpfile = test_tmp_dir .. "/no_token.json"
       local f = io.open(tmpfile, "w")
       f:write('{"github_username": "user", "repos": ["owner/repo"]}')
@@ -65,7 +65,7 @@ describe("pr-review.config", function()
       local cfg, err = config.load()
       assert.is_nil(cfg)
       assert.is_not_nil(err)
-      assert.matches("github_token is required", err)
+      assert.matches("github_token or tokens is required", err)
 
       os.remove(tmpfile)
     end)
@@ -85,7 +85,7 @@ describe("pr-review.config", function()
       os.remove(tmpfile)
     end)
 
-    it("returns error when repos is empty", function()
+    it("accepts empty repos for auto-discovery", function()
       local tmpfile = test_tmp_dir .. "/empty_repos.json"
       local f = io.open(tmpfile, "w")
       f:write('{"github_token": "ghp_xxx", "github_username": "user", "repos": []}')
@@ -93,9 +93,10 @@ describe("pr-review.config", function()
 
       config.config_path = tmpfile
       local cfg, err = config.load()
-      assert.is_nil(cfg)
-      assert.is_not_nil(err)
-      assert.matches("repos must be a non%-empty array", err)
+      -- Empty repos is now valid - enables auto-discovery
+      assert.is_nil(err)
+      assert.is_not_nil(cfg)
+      assert.equals(0, #cfg.repos)
 
       os.remove(tmpfile)
     end)

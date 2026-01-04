@@ -10,20 +10,12 @@ describe("pr-review.ui", function()
       assert.is_function(ui.create_floating_window)
     end)
 
-    it("has pr_list function", function()
-      assert.is_function(ui.pr_list)
+    it("has show_description function", function()
+      assert.is_function(ui.show_description)
     end)
 
     it("has close_pr_list function", function()
       assert.is_function(ui.close_pr_list)
-    end)
-
-    it("has refresh_pr_list function", function()
-      assert.is_function(ui.refresh_pr_list)
-    end)
-
-    it("has fetch_all_prs function", function()
-      assert.is_function(ui.fetch_all_prs)
     end)
 
     it("has state table", function()

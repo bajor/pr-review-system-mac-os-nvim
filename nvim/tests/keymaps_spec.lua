@@ -27,56 +27,54 @@ describe("pr-review.keymaps", function()
       assert.is_function(keymaps.setup_buffer)
     end)
 
-    it("has get_help function", function()
-      assert.is_function(keymaps.get_help)
+    it("has next_point function", function()
+      assert.is_function(keymaps.next_point)
     end)
 
-    it("has show_help function", function()
-      assert.is_function(keymaps.show_help)
+    it("has prev_point function", function()
+      assert.is_function(keymaps.prev_point)
+    end)
+
+    it("has comment_at_cursor function", function()
+      assert.is_function(keymaps.comment_at_cursor)
+    end)
+
+    it("has show_description function", function()
+      assert.is_function(keymaps.show_description)
     end)
   end)
 
   describe("keymaps table", function()
-    it("has file navigation keymaps", function()
-      local has_next_file = false
-      local has_prev_file = false
-
+    it("has nn keymap for next point", function()
+      local found = false
       for _, km in ipairs(keymaps.keymaps) do
-        if km.lhs == "]f" then has_next_file = true end
-        if km.lhs == "[f" then has_prev_file = true end
+        if km.lhs == "nn" then found = true end
       end
-
-      assert.is_true(has_next_file)
-      assert.is_true(has_prev_file)
+      assert.is_true(found)
     end)
 
-    it("has comment navigation keymaps", function()
-      local has_next_comment = false
-      local has_prev_comment = false
-
+    it("has pp keymap for prev point", function()
+      local found = false
       for _, km in ipairs(keymaps.keymaps) do
-        if km.lhs == "]c" then has_next_comment = true end
-        if km.lhs == "[c" then has_prev_comment = true end
+        if km.lhs == "pp" then found = true end
       end
-
-      assert.is_true(has_next_comment)
-      assert.is_true(has_prev_comment)
+      assert.is_true(found)
     end)
 
-    it("has comment action keymaps", function()
-      local has_create = false
-      local has_list = false
-      local has_resolve = false
-
+    it("has cc keymap for comment", function()
+      local found = false
       for _, km in ipairs(keymaps.keymaps) do
-        if km.lhs == "<leader>cc" then has_create = true end
-        if km.lhs == "<leader>lc" then has_list = true end
-        if km.lhs == "<leader>rc" then has_resolve = true end
+        if km.lhs == "cc" then found = true end
       end
+      assert.is_true(found)
+    end)
 
-      assert.is_true(has_create)
-      assert.is_true(has_list)
-      assert.is_true(has_resolve)
+    it("has leader-dd keymap for description", function()
+      local found = false
+      for _, km in ipairs(keymaps.keymaps) do
+        if km.lhs == "<leader>dd" then found = true end
+      end
+      assert.is_true(found)
     end)
 
     it("all keymaps have mode, lhs, rhs, and desc", function()
@@ -86,6 +84,10 @@ describe("pr-review.keymaps", function()
         assert.is_not_nil(km.rhs)
         assert.is_string(km.desc)
       end
+    end)
+
+    it("has exactly 4 keymaps", function()
+      assert.equals(4, #keymaps.keymaps)
     end)
   end)
 
@@ -125,30 +127,6 @@ describe("pr-review.keymaps", function()
       -- Should not error
       keymaps.setup_buffer(buf)
       vim.api.nvim_buf_delete(buf, { force = true })
-    end)
-  end)
-
-  describe("get_help", function()
-    it("returns array of strings", function()
-      local help = keymaps.get_help()
-      assert.is_table(help)
-      assert.is_true(#help > 0)
-      for _, line in ipairs(help) do
-        assert.is_string(line)
-      end
-    end)
-
-    it("includes header", function()
-      local help = keymaps.get_help()
-      assert.equals("PR Review Keymaps:", help[1])
-    end)
-
-    it("includes all categories", function()
-      local help = keymaps.get_help()
-      local text = table.concat(help, "\n")
-      assert.is_truthy(text:match("File Navigation"))
-      assert.is_truthy(text:match("Comment Navigation"))
-      assert.is_truthy(text:match("Comment Actions"))
     end)
   end)
 end)

@@ -9,30 +9,30 @@ M.config = {
 }
 
 --- Setup highlight groups for diff display
---- Uses blue/orange for colorblind accessibility (works well with gruvbox)
+--- Uses dark green/red backgrounds for added/deleted lines
 local function setup_highlights()
-  -- Blue background for added lines (gruvbox-friendly)
+  -- Dark green background for added lines
   vim.api.nvim_set_hl(0, "PRReviewAdd", {
-    bg = "#1d3b53", -- Dark blue background
+    bg = "#1a2f1a", -- Dark green background
     fg = nil,
     default = true,
   })
 
-  -- Orange/yellow background for deleted lines (gruvbox-friendly)
+  -- Dark red background for deleted lines
   vim.api.nvim_set_hl(0, "PRReviewDelete", {
-    bg = "#3d2a1a", -- Dark orange/brown background
-    fg = "#fe8019", -- Gruvbox orange text
+    bg = "#3d1a1a", -- Dark red background
+    fg = "#cc6666", -- Light red text
     default = true,
   })
 
-  -- Sign column colors (colorblind-friendly)
+  -- Sign column colors
   vim.api.nvim_set_hl(0, "PRReviewAddSign", {
-    fg = "#83a598", -- Gruvbox blue
+    fg = "#98c379", -- Green
     default = true,
   })
 
   vim.api.nvim_set_hl(0, "PRReviewDeleteSign", {
-    fg = "#fe8019", -- Gruvbox orange
+    fg = "#e06c75", -- Red
     default = true,
   })
 end
