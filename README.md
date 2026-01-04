@@ -47,6 +47,11 @@ open /Applications/PRReview.app
 make uninstall-app
 ```
 
+**Required:** Grant Accessibility permissions for the app to open PRs in Ghostty:
+1. Go to **System Settings → Privacy & Security → Accessibility**
+2. Click **+** and add `/Applications/PRReview.app`
+3. Ensure the toggle is enabled
+
 ## Configuration
 
 Create `~/.config/pr-review/config.json`:
