@@ -20,6 +20,12 @@ local last_known_sha = nil
 --- How many commits behind base branch
 local commits_behind = 0
 
+--- Get how many commits behind base branch
+---@return number
+function M.get_commits_behind()
+  return commits_behind
+end
+
 --- Setup the winbar warning highlight group
 local function setup_warning_highlight()
   vim.api.nvim_set_hl(0, "PRReviewWarning", { fg = "#ffffff", bg = "#cc0000", bold = true })

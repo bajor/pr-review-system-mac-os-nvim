@@ -10,7 +10,7 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   local subcommand = args[1]
 
   if not subcommand then
-    vim.notify("Usage: :PRReview <list|open|comments|submit|sync|update|close>", vim.log.levels.WARN)
+    vim.notify("Usage: :PRReview <list|open|comments|submit|sync|approve|close>", vim.log.levels.WARN)
     return
   end
 
@@ -37,6 +37,12 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   elseif subcommand == "close" then
     local pr_open = require("pr-review.open")
     pr_open.close_pr()
+  elseif subcommand == "approve" then
+    local pr_review = require("pr-review.review")
+    pr_review.quick_approve(false)
+  elseif subcommand == "approve!" then
+    local pr_review = require("pr-review.review")
+    pr_review.quick_approve(true) -- force approve even if out of sync
   elseif subcommand == "config" then
     -- Open config file in current buffer
     local config_path = vim.fn.expand("~/.config/pr-review/config.json")
@@ -80,7 +86,7 @@ end, {
     local args = vim.split(cmdline, "%s+")
     if #args == 2 then
       -- Complete subcommands
-      return { "list", "open", "comments", "submit", "sync", "update", "refresh", "close", "config" }
+      return { "list", "open", "comments", "submit", "sync", "approve", "approve!", "close", "config" }
     end
     return {}
   end,

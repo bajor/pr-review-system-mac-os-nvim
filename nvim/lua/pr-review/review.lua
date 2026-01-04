@@ -219,9 +219,23 @@ function M.prompt_review_body(event)
 end
 
 --- Quick approve - approve without comments
-function M.quick_approve()
+---@param force? boolean If true, approve even if out of sync
+function M.quick_approve(force)
   if not state.is_active() then
     vim.notify("No active PR review session", vim.log.levels.WARN)
+    return
+  end
+
+  -- Check if branch is behind (unless force is true)
+  local open = require("pr-review.open")
+  local behind = open.get_commits_behind()
+  if behind > 0 and not force then
+    local pr = state.get_pr()
+    local base = pr and pr.base and pr.base.ref or "base"
+    vim.notify(
+      string.format("Cannot approve: branch is %d commit(s) behind %s. Run :PRReview sync first, or use :PRReview approve! to force.", behind, base),
+      vim.log.levels.ERROR
+    )
     return
   end
 
