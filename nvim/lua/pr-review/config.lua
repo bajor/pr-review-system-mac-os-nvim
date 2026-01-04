@@ -50,22 +50,24 @@ end
 ---@param config table
 ---@return boolean, string?
 local function validate_config(config)
-  if not config.github_token or config.github_token == "" then
-    return false, "github_token is required"
+  -- Require either github_token or tokens map
+  local has_token = config.github_token and config.github_token ~= ""
+  local has_tokens = config.tokens and type(config.tokens) == "table" and next(config.tokens) ~= nil
+  if not has_token and not has_tokens then
+    return false, "github_token or tokens is required"
   end
 
   if not config.github_username or config.github_username == "" then
     return false, "github_username is required"
   end
 
-  if not config.repos or type(config.repos) ~= "table" or #config.repos == 0 then
-    return false, "repos must be a non-empty array"
-  end
-
-  -- Validate repo format (owner/repo)
-  for _, repo in ipairs(config.repos) do
-    if not repo:match("^[%w%-_.]+/[%w%-_.]+$") then
-      return false, string.format("Invalid repo format: '%s' (expected 'owner/repo')", repo)
+  -- repos is optional (empty means auto-discovery in Swift app)
+  -- Validate repo format if repos are specified
+  if config.repos and type(config.repos) == "table" then
+    for _, repo in ipairs(config.repos) do
+      if not repo:match("^[%w%-_.]+/[%w%-_.]+$") then
+        return false, string.format("Invalid repo format: '%s' (expected 'owner/repo')", repo)
+      end
     end
   end
 
