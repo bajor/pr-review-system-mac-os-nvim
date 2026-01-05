@@ -8,6 +8,7 @@ You are an AI coding agent. Follow these rules strictly. No exceptions without e
 
 | Rule | Summary |
 |------|---------|
+| **Issues Over PR Bloat** | **Create separate issues for unrelated fixes/improvements. Never bundle.** |
 | Plan First | Plan before implementing anything non-trivial |
 | Type Safety | Make invalid states irrepresentable |
 | Test Everything | Unit + E2E, happy path + edge cases |
@@ -20,7 +21,88 @@ You are an AI coding agent. Follow these rules strictly. No exceptions without e
 
 ---
 
-## 1. Plan Before Coding
+## 1. Issues Over PR Bloat (CRITICAL)
+
+**This is the most important rule for maintainable workflow.**
+
+When reviewing code, answering PR questions, or finding improvements during any work:
+
+**ALWAYS create separate GitHub issues for anything not directly required by the current PR.**
+
+### Why This Matters
+
+- Large PRs are unreadable and unreviewable
+- Mixing concerns hides bugs
+- Atomic changes are easier to revert
+- Issues create a traceable backlog
+- Smaller PRs merge faster
+
+### The Rule
+
+**If you find something during PR work that CAN be fixed separately, it MUST be a separate issue.**
+
+Do NOT:
+- Add "while I'm here" fixes to the current PR
+- Bundle refactoring with feature work
+- Fix unrelated bugs in the same PR
+- Improve code style in files you're not directly changing
+
+Do:
+- Create an issue with clear title and description
+- Reference the issue in PR comments if relevant
+- Keep the current PR laser-focused on its stated goal
+
+### Issue Creation Template
+
+When creating issues for discovered problems:
+
+```markdown
+## Title
+[TYPE] Brief description
+
+## Description
+What the problem is. Be specific.
+
+## Location
+File(s) and line number(s) if applicable.
+
+## Suggested Fix (optional)
+How it could be fixed.
+
+## Found During
+Link to PR or context where this was discovered.
+```
+
+**Types:** `[BUG]`, `[REFACTOR]`, `[TECH-DEBT]`, `[IMPROVEMENT]`, `[DOCS]`, `[TEST]`
+
+### Examples
+
+**BAD:** PR titled "Add user authentication" that also:
+- Fixes a typo in README
+- Refactors the logger utility
+- Updates a dependency
+- Adds missing tests for an unrelated module
+
+**GOOD:** PR titled "Add user authentication" that ONLY adds user authentication. Four separate issues created for the other items.
+
+### Decision Flowchart
+
+```
+Found something to fix/improve?
+    │
+    ▼
+Is it REQUIRED for current PR to work?
+    │
+    ├─ YES → Include in PR
+    │
+    └─ NO → Create issue, do NOT include in PR
+```
+
+**When in doubt: create an issue.**
+
+---
+
+## 2. Plan Before Coding
 
 **When to plan:** New features, refactoring, bug investigation, multi-file changes.
 
@@ -28,7 +110,7 @@ You are an AI coding agent. Follow these rules strictly. No exceptions without e
 
 ---
 
-## 2. Type-Level Design
+## 3. Type-Level Design
 
 Design types so the compiler catches errors, not runtime.
 
@@ -57,7 +139,7 @@ type User =
 
 ---
 
-## 3. Testing Strategy
+## 4. Testing Strategy
 
 Every implementation needs: unit tests + E2E tests + happy paths + edge cases.
 
@@ -75,7 +157,7 @@ If `make test` is missing or incomplete, fix it first.
 
 ---
 
-## 4. Type Checking and Linting
+## 5. Type Checking and Linting
 
 Run on every verification cycle.
 
@@ -94,7 +176,7 @@ test:
 
 ---
 
-## 5. Architecture Documentation
+## 6. Architecture Documentation
 
 **Trigger:** Any structural change to the codebase.
 
@@ -142,7 +224,7 @@ Steps needed to transition from old to new.
 
 ---
 
-## 6. Documentation Updates
+## 7. Documentation Updates
 
 **Rule: Every PR must update relevant documentation.**
 
@@ -159,7 +241,7 @@ Mandatory, not optional. Documentation rot is a bug.
 
 ---
 
-## 7. Pull Request Descriptions
+## 8. Pull Request Descriptions
 
 **PR descriptions must be verbose, explanatory, and written in a teaching style.**
 
@@ -185,6 +267,9 @@ What tests were added or modified. How to verify the change works.
 ### Trade-offs and Alternatives Considered
 What other approaches were evaluated. Why this one was chosen.
 
+### Issues Created
+List any issues created for out-of-scope improvements discovered during this work.
+
 ### Comprehension Questions
 At the bottom of every PR, include 1-3 questions to verify the reviewer understands the change.
 
@@ -201,7 +286,7 @@ At the bottom of every PR, include 1-3 questions to verify the reviewer understa
 
 ---
 
-## 8. GitHub Actions CI
+## 9. GitHub Actions CI
 
 If the repo lacks CI, create it.
 
@@ -232,7 +317,7 @@ jobs:
 
 ---
 
-## 9. Code Simplicity (KISS)
+## 10. Code Simplicity (KISS)
 
 Simple and readable beats clever and compact.
 
@@ -254,7 +339,7 @@ Simple and readable beats clever and compact.
 
 ---
 
-## 10. Minimal Dependencies
+## 11. Minimal Dependencies
 
 Every external dependency is a liability.
 
@@ -270,7 +355,7 @@ Every external dependency is a liability.
 
 ---
 
-## 11. Code Review
+## 12. Code Review
 
 Run code review on all non-trivial PRs.
 
@@ -280,12 +365,13 @@ Run code review on all non-trivial PRs.
 3. Commit and push
 4. Create PR (with verbose description and comprehension questions)
 5. Run code review
-6. Address issues with high confidence
-7. Re-run if significant changes made
+6. **Create issues for any discovered improvements outside PR scope**
+7. Address issues with high confidence (only those in scope)
+8. Re-run if significant changes made
 
 ---
 
-## 12. Commit Discipline
+## 13. Commit Discipline
 
 Commit when work is complete and verified.
 
@@ -311,6 +397,7 @@ git commit -m "Fix race condition in cache invalidation" -m "Previous implementa
 
 Before marking any task complete:
 
+- [ ] **No out-of-scope changes in PR (create issues instead)**
 - [ ] Planning done (if non-trivial)
 - [ ] Types prevent invalid states
 - [ ] Unit tests written (happy path + edge cases)
@@ -324,6 +411,7 @@ Before marking any task complete:
 - [ ] PR description is verbose and explanatory
 - [ ] PR includes ARCHITECTURE_DIFF.md content (if created)
 - [ ] PR includes 1-3 comprehension questions
+- [ ] **Issues created for all discovered improvements**
 - [ ] Code review completed
 - [ ] Branch updated with latest main/master
 - [ ] Changes committed with clear message
