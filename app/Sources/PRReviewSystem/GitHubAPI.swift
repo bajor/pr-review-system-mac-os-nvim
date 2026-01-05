@@ -49,6 +49,14 @@ public actor GitHubAPI {
         return try await fetchAllPages(url: url)
     }
 
+    /// List open issues for a repository (excludes pull requests)
+    func listIssues(owner: String, repo: String) async throws -> [Issue] {
+        let url = "\(Self.baseURL)/repos/\(owner)/\(repo)/issues?state=open&per_page=100"
+        let allItems: [Issue] = try await fetchAllPages(url: url)
+        // GitHub's issues endpoint returns PRs too - filter them out
+        return allItems.filter { $0.pullRequest == nil }
+    }
+
     /// Get a single pull request
     func getPR(owner: String, repo: String, number: Int) async throws -> PullRequest {
         let url = "\(Self.baseURL)/repos/\(owner)/\(repo)/pulls/\(number)"

@@ -16,6 +16,15 @@ public struct PRDisplayInfo {
     }
 }
 
+/// Issue display info (simpler than PRDisplayInfo - no commits/checks)
+public struct IssueDisplayInfo {
+    public let issue: Issue
+
+    public init(issue: Issue) {
+        self.issue = issue
+    }
+}
+
 /// Manages the menu bar status item and menu
 public final class MenuBarController: NSObject {
     // MARK: - Properties
@@ -28,6 +37,9 @@ public final class MenuBarController: NSObject {
 
     /// Current pull requests grouped by repository (with display info)
     private var pullRequests: [String: [PRDisplayInfo]] = [:]
+
+    /// Current issues grouped by repository
+    private var issues: [String: [IssueDisplayInfo]] = [:]
 
     /// Badge count (number of PRs needing review)
     private var badgeCount: Int = 0
@@ -146,6 +158,42 @@ public final class MenuBarController: NSObject {
             }
         }
 
+        // Issues section
+        if !issues.isEmpty {
+            // Issues header
+            let issuesHeader = NSMenuItem(title: "Issues", action: nil, keyEquivalent: "")
+            issuesHeader.isEnabled = false
+            if let font = NSFont.boldSystemFont(ofSize: 13) as NSFont? {
+                issuesHeader.attributedTitle = NSAttributedString(
+                    string: "Issues",
+                    attributes: [.font: font, .foregroundColor: NSColor.labelColor]
+                )
+            }
+            newMenu.addItem(issuesHeader)
+            newMenu.addItem(NSMenuItem.separator())
+
+            for (repo, issueInfos) in issues.sorted(by: { $0.key < $1.key }) {
+                // Repository header
+                let repoItem = NSMenuItem(title: repo, action: nil, keyEquivalent: "")
+                repoItem.isEnabled = false
+                if let font = NSFont.boldSystemFont(ofSize: 12) as NSFont? {
+                    repoItem.attributedTitle = NSAttributedString(
+                        string: repo,
+                        attributes: [.font: font]
+                    )
+                }
+                newMenu.addItem(repoItem)
+
+                // Issue items
+                for issueInfo in issueInfos {
+                    let issueItem = createIssueMenuItem(issueInfo: issueInfo)
+                    newMenu.addItem(issueItem)
+                }
+
+                newMenu.addItem(NSMenuItem.separator())
+            }
+        }
+
         // Actions
         newMenu.addItem(NSMenuItem.separator())
 
@@ -245,6 +293,46 @@ public final class MenuBarController: NSObject {
         let githubItem = NSMenuItem(title: "Go to GitHub", action: #selector(openInGitHub(_:)), keyEquivalent: "")
         githubItem.target = self
         githubItem.representedObject = pr.htmlUrl
+        submenu.addItem(githubItem)
+
+        item.submenu = submenu
+        return item
+    }
+
+    /// Create a menu item for an issue with description hover
+    private func createIssueMenuItem(issueInfo: IssueDisplayInfo) -> NSMenuItem {
+        let issue = issueInfo.issue
+
+        // Build attributed title with issue number and title
+        let titleText = "  #\(issue.number): \(issue.title)"
+
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+            .foregroundColor: NSColor.labelColor
+        ]
+
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item.attributedTitle = NSAttributedString(string: titleText, attributes: titleAttrs)
+
+        // Create submenu with issue description and Go to GitHub action
+        let submenu = NSMenu()
+
+        // Issue description in a scrollable view
+        let description = issue.body ?? "No description provided."
+        let cleanDescription = markdownToPlainText(description)
+
+        // Create scrollable description view
+        let descMenuItem = NSMenuItem()
+        let descView = createScrollableDescriptionView(text: cleanDescription)
+        descMenuItem.view = descView
+        submenu.addItem(descMenuItem)
+
+        submenu.addItem(NSMenuItem.separator())
+
+        // Go to GitHub action
+        let githubItem = NSMenuItem(title: "Go to GitHub", action: #selector(openInGitHub(_:)), keyEquivalent: "")
+        githubItem.target = self
+        githubItem.representedObject = issue.htmlUrl
         submenu.addItem(githubItem)
 
         item.submenu = submenu
@@ -472,6 +560,21 @@ public final class MenuBarController: NSObject {
             displayInfos[repo] = prList.map { PRDisplayInfo(pr: $0) }
         }
         updatePullRequests(displayInfos)
+    }
+
+    /// Update the issues displayed in the menu
+    public func updateIssues(_ newIssues: [String: [IssueDisplayInfo]]) {
+        issues = newIssues
+        rebuildMenu()
+    }
+
+    /// Convenience method to update with plain Issues
+    public func updateIssuesSimple(_ newIssues: [String: [Issue]]) {
+        var displayInfos: [String: [IssueDisplayInfo]] = [:]
+        for (repo, issueList) in newIssues {
+            displayInfos[repo] = issueList.map { IssueDisplayInfo(issue: $0) }
+        }
+        updateIssues(displayInfos)
     }
 
     /// Update the commit message for a specific PR

@@ -340,7 +340,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Pull Request Fetching
+    // MARK: - Pull Request and Issue Fetching
 
     private func refreshPullRequests() async {
         guard let config = config else {
@@ -360,8 +360,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             reposToCheck = discovered
         }
 
-        // Fetch all repos in parallel
-        let allPRs = await withTaskGroup(of: (String, [PRDisplayInfo])?.self) { group in
+        // Fetch all PRs and issues in parallel
+        let (allPRs, allIssues) = await withTaskGroup(of: (prs: (String, [PRDisplayInfo])?, issues: (String, [IssueDisplayInfo])?)?.self) { group in
             for repo in reposToCheck {
                 group.addTask { [self] in
                     // Parse owner/repo from the repo string
@@ -373,33 +373,54 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     // Get API with owner-specific token
                     guard let api = self.api(for: owner) else { return nil }
 
+                    // Fetch PRs
+                    var prResult: (String, [PRDisplayInfo])? = nil
                     do {
                         let prs = try await api.listPRs(owner: owner, repo: repoName)
-                        if prs.isEmpty { return nil }
-
-                        // Create display info
-                        let prInfos = prs.map { PRDisplayInfo(pr: $0) }
-                        return (repo, prInfos)
+                        if !prs.isEmpty {
+                            let prInfos = prs.map { PRDisplayInfo(pr: $0) }
+                            prResult = (repo, prInfos)
+                        }
                     } catch {
                         print("Error fetching PRs for \(repo): \(error)")
-                        return nil
                     }
+
+                    // Fetch Issues
+                    var issueResult: (String, [IssueDisplayInfo])? = nil
+                    do {
+                        let issues = try await api.listIssues(owner: owner, repo: repoName)
+                        if !issues.isEmpty {
+                            let issueInfos = issues.map { IssueDisplayInfo(issue: $0) }
+                            issueResult = (repo, issueInfos)
+                        }
+                    } catch {
+                        print("Error fetching issues for \(repo): \(error)")
+                    }
+
+                    return (prs: prResult, issues: issueResult)
                 }
             }
 
             // Collect results
-            var results: [String: [PRDisplayInfo]] = [:]
+            var prResults: [String: [PRDisplayInfo]] = [:]
+            var issueResults: [String: [IssueDisplayInfo]] = [:]
             for await result in group {
-                if let (repo, prInfos) = result {
-                    results[repo] = prInfos
+                if let r = result {
+                    if let (repo, prInfos) = r.prs {
+                        prResults[repo] = prInfos
+                    }
+                    if let (repo, issueInfos) = r.issues {
+                        issueResults[repo] = issueInfos
+                    }
                 }
             }
-            return results
+            return (prResults, issueResults)
         }
 
-        // Update menu immediately with PR list
+        // Update menu immediately with PR list and issues
         await MainActor.run {
             menuBarController.updatePullRequests(allPRs)
+            menuBarController.updateIssues(allIssues)
         }
 
         // Fetch commit messages and check statuses in parallel (fire and forget)

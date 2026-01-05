@@ -109,6 +109,9 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 - Shows all open PRs from configured repos
 - Displays PR title and last commit message
 - Click a PR to clone/update and open in Ghostty + Neovim
+- **Issues section** - Shows all open issues from configured repos
+  - Hover to see issue description
+  - Click "Go to GitHub" to open issue in browser
 - **Open All PRs** - Opens all PRs in separate Ghostty tabs
 - **Refresh** - Manually refresh PR list
 - **Quit** - Exit the app
