@@ -199,6 +199,102 @@ function M.prev_point()
   goto_point(all_points[#all_points])
 end
 
+--- Get all comment threads across all files (comments only, no diffs)
+---@return table[] comment_points List of {file_index, file, line, type="comment"}
+local function get_all_comment_points()
+  local files = state.get_files()
+  local comment_points = {}
+
+  for file_idx, file in ipairs(files) do
+    local file_comments = state.get_comments(file.filename)
+    local seen = {}
+
+    for _, comment in ipairs(file_comments) do
+      local line = comment.line or comment.original_line or comment.position
+      if line and line > 0 and not seen[line] then
+        table.insert(comment_points, {
+          file_index = file_idx,
+          file = file,
+          line = line,
+          type = "comment",
+        })
+        seen[line] = true
+      end
+    end
+  end
+
+  -- Sort by file index, then by line
+  table.sort(comment_points, function(a, b)
+    if a.file_index ~= b.file_index then
+      return a.file_index < b.file_index
+    end
+    return a.line < b.line
+  end)
+
+  return comment_points
+end
+
+--- Go to next comment thread (across files)
+function M.next_thread()
+  if not state.is_active() then
+    vim.notify("No active PR session", vim.log.levels.WARN)
+    return
+  end
+
+  local comment_points = get_all_comment_points()
+  if #comment_points == 0 then
+    vim.notify("No comment threads in this PR", vim.log.levels.INFO)
+    return
+  end
+
+  local current_file_idx = state.get_current_file_index()
+  local current_line = vim.fn.line(".")
+
+  -- Find next comment after current position
+  for _, point in ipairs(comment_points) do
+    if point.file_index > current_file_idx or
+       (point.file_index == current_file_idx and point.line > current_line) then
+      goto_point(point)
+      return
+    end
+  end
+
+  -- Wrap around to first comment
+  vim.notify("Wrapped to first thread", vim.log.levels.INFO)
+  goto_point(comment_points[1])
+end
+
+--- Go to previous comment thread (across files)
+function M.prev_thread()
+  if not state.is_active() then
+    vim.notify("No active PR session", vim.log.levels.WARN)
+    return
+  end
+
+  local comment_points = get_all_comment_points()
+  if #comment_points == 0 then
+    vim.notify("No comment threads in this PR", vim.log.levels.INFO)
+    return
+  end
+
+  local current_file_idx = state.get_current_file_index()
+  local current_line = vim.fn.line(".")
+
+  -- Find previous comment before current position (iterate in reverse)
+  for i = #comment_points, 1, -1 do
+    local point = comment_points[i]
+    if point.file_index < current_file_idx or
+       (point.file_index == current_file_idx and point.line < current_line) then
+      goto_point(point)
+      return
+    end
+  end
+
+  -- Wrap around to last comment
+  vim.notify("Wrapped to last thread", vim.log.levels.INFO)
+  goto_point(comment_points[#comment_points])
+end
+
 --- Open or create comment at current line
 function M.comment_at_cursor()
   if not state.is_active() then
@@ -220,6 +316,8 @@ end
 M.keymaps = {
   { mode = "n", lhs = "nn", rhs = function() M.next_point() end, desc = "Next diff/comment" },
   { mode = "n", lhs = "pp", rhs = function() M.prev_point() end, desc = "Previous diff/comment" },
+  { mode = "n", lhs = "nt", rhs = function() M.next_thread() end, desc = "Next comment thread" },
+  { mode = "n", lhs = "pt", rhs = function() M.prev_thread() end, desc = "Previous comment thread" },
   { mode = "n", lhs = "cc", rhs = function() M.comment_at_cursor() end, desc = "Comment at cursor" },
   { mode = "n", lhs = "<leader>dd", rhs = function() M.show_description() end, desc = "Show PR description" },
 }

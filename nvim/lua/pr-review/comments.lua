@@ -198,13 +198,13 @@ function M.show_comment_popup(comment)
   end
 
   -- Calculate window dimensions
-  local max_width = 60
+  local max_width = 120
   local width = 0
   for _, line in ipairs(lines) do
     width = math.max(width, #line)
   end
   width = math.min(width + 2, max_width)
-  local height = math.min(#lines, 15)
+  local height = math.min(#lines, 30)
 
   -- Create buffer
   local buf = vim.api.nvim_create_buf(false, true)
@@ -312,8 +312,8 @@ function M.show_comment_thread()
   table.insert(lines, "") -- Empty line for new comment
 
   -- Calculate window dimensions
-  local width = 70
-  local height = math.min(#lines + 2, 25)
+  local width = 140
+  local height = math.min(#lines + 2, 50)
 
   -- Create buffer
   local buf = vim.api.nvim_create_buf(false, true)
@@ -331,7 +331,7 @@ function M.show_comment_thread()
     height = height,
     style = "minimal",
     border = "rounded",
-    title = string.format(" Comments on L%d (s=save, q=close) ", current_line),
+    title = string.format(" Comments on L%d (s=save, r=resolve, q=close) ", current_line),
     title_pos = "center",
   })
 
@@ -480,8 +480,50 @@ function M.show_comment_thread()
     end
   end
 
+  -- Resolve thread function
+  local function resolve_thread()
+    if #line_comments == 0 then
+      vim.notify("No comments to resolve", vim.log.levels.WARN)
+      return
+    end
+
+    -- Toggle resolved status on all comments in this thread
+    local all_resolved = true
+    for _, comment in ipairs(line_comments) do
+      if not comment.resolved then
+        all_resolved = false
+        break
+      end
+    end
+
+    -- Toggle: if all resolved, unresolve all; otherwise resolve all
+    local new_status = not all_resolved
+    for _, comment in ipairs(line_comments) do
+      comment.resolved = new_status
+    end
+
+    -- Update state
+    state.set_comments(path, file_comments)
+
+    -- Refresh the current buffer's comment display
+    for _, b in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_valid(b) then
+        local name = vim.api.nvim_buf_get_name(b)
+        if name:find(path, 1, true) then
+          M.show_comments(b, file_comments)
+          break
+        end
+      end
+    end
+
+    local msg = new_status and "Thread resolved" or "Thread unresolved"
+    vim.notify(msg, vim.log.levels.INFO)
+    vim.api.nvim_win_close(win, true)
+  end
+
   -- Keymaps
   vim.keymap.set("n", "s", save_comment, { buffer = buf, noremap = true, silent = true })
+  vim.keymap.set("n", "r", resolve_thread, { buffer = buf, noremap = true, silent = true })
   vim.keymap.set("n", "q", function()
     vim.api.nvim_win_close(win, true)
   end, { buffer = buf, noremap = true, silent = true })
@@ -517,8 +559,8 @@ function M.create_comment()
   vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
 
   -- Create floating window for comment input
-  local width = 60
-  local height = 10
+  local width = 120
+  local height = 20
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "cursor",
     row = 1,
@@ -663,31 +705,79 @@ function M.create_comment()
   end, { buffer = buf, noremap = true, silent = true })
 end
 
---- List all comments in the current file
+--- List all comments across all PR files
 function M.list_comments()
-  local comments = M.get_buffer_comments()
-  if #comments == 0 then
-    vim.notify("No comments in this file", vim.log.levels.INFO)
+  if not state.is_active() then
+    vim.notify("No active PR review session", vim.log.levels.WARN)
     return
   end
 
+  -- Collect all comments from all files
+  local all_comments = {}
+  local total_count = 0
+
+  -- Iterate through all file paths with comments
+  for file_path, file_comments in pairs(state.session.comments) do
+    if #file_comments > 0 then
+      for _, comment in ipairs(file_comments) do
+        table.insert(all_comments, {
+          file = file_path,
+          comment = comment,
+        })
+        total_count = total_count + 1
+      end
+    end
+  end
+
+  if total_count == 0 then
+    vim.notify("No comments in this PR", vim.log.levels.INFO)
+    return
+  end
+
+  -- Sort by file path, then by line number
+  table.sort(all_comments, function(a, b)
+    if a.file ~= b.file then
+      return a.file < b.file
+    end
+    local line_a = a.comment.line or a.comment.original_line or a.comment.position or 0
+    local line_b = b.comment.line or b.comment.original_line or b.comment.position or 0
+    return line_a < line_b
+  end)
+
+  -- Build display lines grouped by file
   local lines = {}
-  for i, comment in ipairs(comments) do
-    local line = comment.line or comment.original_line or comment.position or 0
+  local line_to_entry = {} -- Maps display line number to comment entry
+  local current_file = nil
+
+  for _, entry in ipairs(all_comments) do
+    -- Add file header if new file
+    if entry.file ~= current_file then
+      if current_file ~= nil then
+        table.insert(lines, "") -- Blank line between files
+      end
+      table.insert(lines, "── " .. entry.file .. " ──")
+      current_file = entry.file
+    end
+
+    local comment = entry.comment
+    local line_num = comment.line or comment.original_line or comment.position or 0
     local author = comment.user and comment.user.login or "unknown"
-    local preview = (comment.body or ""):gsub("\n", " "):sub(1, 40)
+    local preview = (comment.body or ""):gsub("\n", " "):sub(1, 60)
     local status = comment.pending and " [pending]" or (comment.resolved and " [resolved]" or "")
-    table.insert(lines, string.format("%d. L%d %s: %s%s", i, line, author, preview, status))
+
+    table.insert(lines, string.format("  L%-4d %s: %s%s", line_num, author, preview, status))
+    line_to_entry[#lines] = entry
   end
 
   -- Create buffer
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.api.nvim_buf_set_option(buf, "modifiable", false)
+  vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
 
   -- Create floating window
-  local width = math.min(80, vim.o.columns - 4)
-  local height = math.min(#lines + 2, 20)
+  local width = math.min(160, vim.o.columns - 4)
+  local height = math.min(#lines + 2, 40)
 
   local win = vim.api.nvim_open_win(buf, true, {
     relative = "editor",
@@ -697,26 +787,47 @@ function M.list_comments()
     height = height,
     style = "minimal",
     border = "rounded",
-    title = " Comments (" .. #comments .. ") ",
+    title = " All PR Comments (" .. total_count .. ") ",
     title_pos = "center",
   })
+
+  -- Add syntax highlighting for file headers
+  vim.api.nvim_buf_call(buf, function()
+    vim.fn.matchadd("Title", "^── .* ──$")
+    vim.fn.matchadd("Number", "L%d\\+")
+    vim.fn.matchadd("Comment", "\\[pending\\]")
+    vim.fn.matchadd("DiagnosticOk", "\\[resolved\\]")
+  end)
 
   -- Jump to comment on Enter
   vim.keymap.set("n", "<CR>", function()
     local cursor_line = vim.fn.line(".")
-    local comment = comments[cursor_line]
-    if comment then
+    local entry = line_to_entry[cursor_line]
+    if entry then
       vim.api.nvim_win_close(win, true)
-      local target_line = comment.line or comment.original_line or comment.position
-      if target_line then
-        vim.api.nvim_win_set_cursor(0, { target_line, 0 })
-        M.show_comment_popup(comment)
+
+      -- Open the file
+      local clone_path = state.get_clone_path()
+      if clone_path then
+        local full_path = clone_path .. "/" .. entry.file
+        vim.cmd("edit " .. vim.fn.fnameescape(full_path))
+
+        -- Jump to line
+        local target_line = entry.comment.line or entry.comment.original_line or entry.comment.position
+        if target_line then
+          vim.api.nvim_win_set_cursor(0, { target_line, 0 })
+          M.show_comment_popup(entry.comment)
+        end
       end
     end
   end, { buffer = buf, noremap = true, silent = true })
 
-  -- Close on q
+  -- Close on q or Esc
   vim.keymap.set("n", "q", function()
+    vim.api.nvim_win_close(win, true)
+  end, { buffer = buf, noremap = true, silent = true })
+
+  vim.keymap.set("n", "<Esc>", function()
     vim.api.nvim_win_close(win, true)
   end, { buffer = buf, noremap = true, silent = true })
 end

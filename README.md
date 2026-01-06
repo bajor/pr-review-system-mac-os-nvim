@@ -5,6 +5,17 @@ A complete PR code review system for GitHub, consisting of:
 1. **macOS menu bar app** - Polls GitHub for PRs, shows notifications, launches review sessions
 2. **Neovim plugin** - Full PR review experience with diff viewing, comments, and submissions
 
+## Quick Reference
+
+| Key | Action |
+|-----|--------|
+| `nn` / `pp` | Next/previous diff or comment |
+| `nt` / `pt` | Next/previous comment thread |
+| `cc` | Open/create comment at cursor |
+| `s` | Save comment |
+| `r` | Resolve thread |
+| `q` | Close window |
+
 ## Requirements
 
 ### Neovim Plugin
@@ -137,12 +148,14 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 
 ### Review Mode Keybindings
 
-Only 4 shortcuts to remember:
+Only 6 shortcuts to remember:
 
 | Key | Action |
 |-----|--------|
 | `nn` | Next diff or comment (across all files) |
 | `pp` | Previous diff or comment (across all files) |
+| `nt` | Next comment thread (across all files) |
+| `pt` | Previous comment thread (across all files) |
 | `cc` | Open/create comment at cursor |
 | `<leader>dd` | Show PR description |
 
@@ -151,10 +164,16 @@ Only 4 shortcuts to remember:
 - Automatically switches files when needed
 - Wraps around at start/end of PR
 
+**Thread Navigation (`nt` / `pt`):**
+- Jumps to next/previous comment thread only (skips diffs)
+- Useful for reviewing feedback without stopping at every change
+- Wraps around at start/end of PR
+
 **Comments (`cc`):**
 - Opens floating window showing all comments on the current line
 - If no comments exist, opens new comment editor
 - Press `s` to save and submit to GitHub
+- Press `r` to resolve/unresolve the thread
 - Press `q` or `Esc` to close
 
 ## Development

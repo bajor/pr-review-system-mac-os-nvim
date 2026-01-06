@@ -77,29 +77,26 @@ cp app/.build/release/PRReviewSystem ~/.local/bin/
 ### Review Mode
 | Key | Action |
 |-----|--------|
-| `]f` / `[f` | Next/previous file |
-| `<leader>nd` / `<leader>pd` | Next/previous diff hunk |
+| `nn` | Next diff or comment (across all files) |
+| `pp` | Previous diff or comment (across all files) |
+| `nt` | Next comment thread (across all files) |
+| `pt` | Previous comment thread (across all files) |
 | `cc` | Open comment thread (view/edit/add) |
-| `<leader>cc` | Quick new comment |
-| `<leader>nc` / `<leader>pc` | Next/previous comment |
-| `<leader>lc` | List all comments |
-| `<leader>rc` | Toggle resolved |
-| `<leader>rs` | Submit review |
-| `<leader>ra` | Quick approve |
+| `<leader>dd` | Show PR description |
 
 ### Comment Windows
 | Key | Action |
 |-----|--------|
 | `s` | Save and submit |
+| `r` | Resolve/unresolve thread |
 | `q` / `Esc` | Close/cancel |
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `:PRReview list` | List all PRs |
+| `:PRReview list` | List all PR comments (grouped by file) |
 | `:PRReview open {url}` | Open PR for review |
-| `:PRReview comments` | List comments |
 | `:PRReview submit` | Submit review |
 | `:PRReview sync` | Force sync with remote |
 | `:PRReview update` | Alias for sync |
