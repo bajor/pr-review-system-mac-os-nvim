@@ -12,27 +12,37 @@ local ns_id = vim.api.nvim_create_namespace("pr_review_comments")
 --- Sign group for comments
 local sign_group = "PRReviewComment"
 
---- Define signs for comments
-local function setup_signs()
+--- Define signs and highlight groups for comments
+local function setup_highlights()
+  -- Bright yellow/orange background for comment lines - very visible
+  vim.api.nvim_set_hl(0, "PRReviewCommentLine", { bg = "#4a3d00", fg = "#ffcc00", bold = true })
+  vim.api.nvim_set_hl(0, "PRReviewCommentLineResolved", { bg = "#1a3d1a", fg = "#88cc88" })
+  vim.api.nvim_set_hl(0, "PRReviewCommentLinePending", { bg = "#4a2800", fg = "#ffaa00", bold = true })
+  vim.api.nvim_set_hl(0, "PRReviewCommentSign", { fg = "#ffcc00", bold = true })
+
+  -- Sign highlights with line highlighting
   vim.fn.sign_define("PRReviewComment", {
-    text = "●",
-    texthl = "DiagnosticInfo",
-    numhl = "",
+    text = "💬",
+    texthl = "PRReviewCommentSign",
+    linehl = "PRReviewCommentLine",
+    numhl = "PRReviewCommentSign",
   })
   vim.fn.sign_define("PRReviewCommentResolved", {
     text = "✓",
     texthl = "DiagnosticOk",
-    numhl = "",
+    linehl = "PRReviewCommentLineResolved",
+    numhl = "DiagnosticOk",
   })
   vim.fn.sign_define("PRReviewCommentPending", {
     text = "○",
-    texthl = "DiagnosticWarn",
-    numhl = "",
+    texthl = "PRReviewCommentSign",
+    linehl = "PRReviewCommentLinePending",
+    numhl = "PRReviewCommentSign",
   })
 end
 
--- Initialize signs
-setup_signs()
+-- Initialize highlights and signs
+setup_highlights()
 
 --- Get the current file path relative to clone root
 ---@return string|nil
@@ -60,10 +70,18 @@ function M.show_comments(buf, comments)
   -- Clear existing comment displays
   M.clear_comments(buf)
 
+  -- Ensure sign column is visible
+  vim.api.nvim_buf_call(buf, function()
+    vim.opt_local.signcolumn = "yes:2"
+  end)
+
+  -- Get buffer line count to avoid placing signs on non-existent lines
+  local line_count = vim.api.nvim_buf_line_count(buf)
+
   for _, comment in ipairs(comments or {}) do
     local line = comment.line or comment.original_line or comment.position
-    if line and line > 0 then
-      -- Place sign
+    if line and line > 0 and line <= line_count then
+      -- Place sign with high priority
       local sign_name = "PRReviewComment"
       if comment.resolved then
         sign_name = "PRReviewCommentResolved"
@@ -71,9 +89,10 @@ function M.show_comments(buf, comments)
         sign_name = "PRReviewCommentPending"
       end
 
-      pcall(vim.fn.sign_place, 0, sign_group, sign_name, buf, { lnum = line, priority = 10 })
+      -- Priority 100 to ensure we're above most other signs
+      pcall(vim.fn.sign_place, 0, sign_group, sign_name, buf, { lnum = line, priority = 100 })
 
-      -- Add virtual text preview
+      -- Add virtual text preview with bright highlight
       local preview = comment.body or ""
       preview = preview:gsub("\n", " "):sub(1, 50)
       if #(comment.body or "") > 50 then
@@ -81,7 +100,7 @@ function M.show_comments(buf, comments)
       end
 
       pcall(vim.api.nvim_buf_set_extmark, buf, ns_id, line - 1, 0, {
-        virt_text = { { "  💬 " .. preview, "Comment" } },
+        virt_text = { { "  💬 " .. preview, "PRReviewCommentSign" } },
         virt_text_pos = "eol",
       })
     end
