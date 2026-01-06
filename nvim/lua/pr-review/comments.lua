@@ -724,8 +724,18 @@ function M.create_comment()
   end, { buffer = buf, noremap = true, silent = true })
 end
 
---- List all comments across all PR files
+--- Track comment list window for toggle behavior
+local comment_list_win = nil
+
+--- List all comments across all PR files (toggle behavior)
 function M.list_comments()
+  -- Toggle: if window is open, close it
+  if comment_list_win and vim.api.nvim_win_is_valid(comment_list_win) then
+    vim.api.nvim_win_close(comment_list_win, true)
+    comment_list_win = nil
+    return
+  end
+
   if not state.is_active() then
     vim.notify("No active PR review session", vim.log.levels.WARN)
     return
@@ -810,6 +820,9 @@ function M.list_comments()
     title_pos = "center",
   })
 
+  -- Track window for toggle behavior
+  comment_list_win = win
+
   -- Add syntax highlighting for file headers
   vim.api.nvim_buf_call(buf, function()
     vim.fn.matchadd("Title", "^── .* ──$")
@@ -818,12 +831,18 @@ function M.list_comments()
     vim.fn.matchadd("DiagnosticOk", "\\[resolved\\]")
   end)
 
+  -- Helper to close window and clear tracker
+  local function close_list()
+    vim.api.nvim_win_close(win, true)
+    comment_list_win = nil
+  end
+
   -- Jump to comment on Enter
   vim.keymap.set("n", "<CR>", function()
     local cursor_line = vim.fn.line(".")
     local entry = line_to_entry[cursor_line]
     if entry then
-      vim.api.nvim_win_close(win, true)
+      close_list()
 
       -- Open the file
       local clone_path = state.get_clone_path()
@@ -842,13 +861,8 @@ function M.list_comments()
   end, { buffer = buf, noremap = true, silent = true })
 
   -- Close on q or Esc
-  vim.keymap.set("n", "q", function()
-    vim.api.nvim_win_close(win, true)
-  end, { buffer = buf, noremap = true, silent = true })
-
-  vim.keymap.set("n", "<Esc>", function()
-    vim.api.nvim_win_close(win, true)
-  end, { buffer = buf, noremap = true, silent = true })
+  vim.keymap.set("n", "q", close_list, { buffer = buf, noremap = true, silent = true })
+  vim.keymap.set("n", "<Esc>", close_list, { buffer = buf, noremap = true, silent = true })
 end
 
 --- Toggle resolved status of comment at current line

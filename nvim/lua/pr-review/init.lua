@@ -55,4 +55,19 @@ function M.setup(opts)
   })
 end
 
+--- Get sync status for lualine/statusline integration
+--- Add to lualine: { require('pr-review').statusline, cond = require('pr-review').is_active }
+---@return string
+function M.statusline()
+  local open = require("pr-review.open")
+  return open.statusline()
+end
+
+--- Check if PR review is active (for lualine cond)
+---@return boolean
+function M.is_active()
+  local open = require("pr-review.open")
+  return open.is_active()
+end
+
 return M

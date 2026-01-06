@@ -33,8 +33,8 @@ function M.has_merge_conflicts()
   return has_conflicts
 end
 
---- Setup the winbar warning highlight groups
-local function setup_warning_highlight()
+--- Setup the statusline highlight groups
+local function setup_statusline_highlight()
   -- Yellow/orange for out of sync (same as comment highlight)
   vim.api.nvim_set_hl(0, "PRReviewWarning", { fg = "#ffcc00", bg = "#4a3d00", bold = true })
   -- Red for conflicts
@@ -43,9 +43,9 @@ local function setup_warning_highlight()
   vim.api.nvim_set_hl(0, "PRReviewOk", { fg = "#88cc88", bg = "#1a3d1a", bold = true })
 end
 
---- Update the winbar to show sync status
-local function update_winbar()
-  setup_warning_highlight()
+--- Update the statusline to show sync status
+local function update_statusline()
+  setup_statusline_highlight()
   local pr = state.get_pr()
   if not pr then return end
 
@@ -63,14 +63,43 @@ local function update_winbar()
       commits_behind, plural, pr.base.ref))
   end
 
-  -- Show status
+  -- Build the statusline string
+  local status_str
   if #parts > 0 then
-    vim.wo.winbar = table.concat(parts, " ")
+    status_str = table.concat(parts, " ")
   elseif commits_behind == 0 and not has_conflicts then
-    vim.wo.winbar = "%#PRReviewOk# ✓ In sync with " .. pr.base.ref .. " %*"
+    status_str = "%#PRReviewOk# ✓ In sync with " .. pr.base.ref .. " %*"
   else
-    vim.wo.winbar = ""
+    return -- No status to show
   end
+
+end
+
+--- Get sync status for lualine/statusline integration
+--- Usage in lualine: { require('pr-review').statusline, cond = require('pr-review').is_active }
+---@return string
+function M.statusline()
+  if not state.is_active() then
+    return ""
+  end
+
+  local pr = state.get_pr()
+  if not pr then return "" end
+
+  if has_conflicts then
+    return "⛔ CONFLICTS"
+  elseif commits_behind > 0 then
+    local plural = commits_behind == 1 and "commit" or "commits"
+    return string.format("⚠ %d %s behind %s", commits_behind, plural, pr.base.ref)
+  else
+    return "✓ In sync"
+  end
+end
+
+--- Check if PR review is active (for lualine cond)
+---@return boolean
+function M.is_active()
+  return state.is_active()
 end
 
 --- Show a loading notification
@@ -465,8 +494,8 @@ function M.open_pr(url)
         -- Open the first file
         open_first_file()
 
-        -- Update winbar (show warning if behind base)
-        vim.defer_fn(update_winbar, 100)
+        -- Update statusline (show warning if behind base)
+        vim.defer_fn(update_statusline, 100)
 
         notify_success(string.format(
           "PR #%d: %s (%d files) - auto-sync enabled",
@@ -492,8 +521,8 @@ function M.close_pr()
   commits_behind = 0
   has_conflicts = false
 
-  -- Clear winbar
-  vim.wo.winbar = ""
+  -- Reset statusline to default
+  vim.wo.statusline = ""
 
   -- Clear all PR review keymaps
   keymaps.clear()
