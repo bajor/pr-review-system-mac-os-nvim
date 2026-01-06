@@ -35,7 +35,7 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   elseif subcommand == "close" then
     local pr_open = require("pr-review.open")
     pr_open.close_pr()
-  elseif subcommand == "merge" then
+  elseif subcommand == "merge" or subcommand == "squash" or subcommand == "rebase" then
     local state = require("pr-review.state")
     local api = require("pr-review.api")
     local config = require("pr-review.config")
@@ -65,10 +65,21 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
 
     local token = config.get_token_for_owner(cfg, owner)
 
-    vim.notify("Merging PR #" .. number .. "...", vim.log.levels.INFO)
+    -- Determine merge method
+    local merge_method = "merge"
+    local method_name = "Merging"
+    if subcommand == "squash" then
+      merge_method = "squash"
+      method_name = "Squash merging"
+    elseif subcommand == "rebase" then
+      merge_method = "rebase"
+      method_name = "Rebasing and merging"
+    end
+
+    vim.notify(method_name .. " PR #" .. number .. "...", vim.log.levels.INFO)
 
     api.merge_pr(owner, repo, number, {
-      merge_method = "merge",
+      merge_method = merge_method,
       commit_title = pr.title,
     }, token, function(result, err)
       vim.schedule(function()
@@ -125,7 +136,7 @@ end, {
     local args = vim.split(cmdline, "%s+")
     if #args == 2 then
       -- Complete subcommands
-      return { "list", "description", "sync", "merge", "close", "config" }
+      return { "list", "description", "sync", "merge", "squash", "rebase", "close", "config" }
     end
     return {}
   end,

@@ -13,6 +13,7 @@ A complete PR code review system for GitHub, consisting of:
 | `nt` / `pt` | Next/previous comment thread |
 | `cc` | Open/create comment at cursor |
 | `<leader>ll` | List all PR comments |
+| `<leader>rr` | Merge PR (pick method) |
 | `s` | Save comment |
 | `r` | Resolve thread |
 | `q` | Close window |
@@ -141,7 +142,9 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 | `:PRReview list` | Show all comments in current PR |
 | `:PRReview description` | Show PR description in floating window |
 | `:PRReview sync` | Force sync PR with remote (fetch latest) |
-| `:PRReview merge` | Merge the PR (blocks if conflicts) |
+| `:PRReview merge` | Merge the PR (merge commit) |
+| `:PRReview squash` | Squash and merge the PR |
+| `:PRReview rebase` | Rebase and merge the PR |
 | `:PRReview close` | Exit review mode |
 | `:PRReview config` | Open config file for editing |
 

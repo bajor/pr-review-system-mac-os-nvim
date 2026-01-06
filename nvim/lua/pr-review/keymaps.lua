@@ -317,6 +317,80 @@ function M.list_comments()
   comments.list_comments()
 end
 
+--- Show merge type picker and merge PR
+function M.merge_picker()
+  if not state.is_active() then
+    vim.notify("No active PR session", vim.log.levels.WARN)
+    return
+  end
+
+  -- Check for conflicts first
+  local sync_status = state.get_sync_status()
+  if sync_status.has_conflicts then
+    vim.notify("Cannot merge: PR has merge conflicts", vim.log.levels.ERROR)
+    return
+  end
+
+  local pr = state.get_pr()
+  local number = state.get_number()
+
+  -- Create picker buffer
+  local lines = {
+    "Select merge method for PR #" .. number .. ":",
+    "",
+    "  [1] Merge        - Create a merge commit",
+    "  [2] Squash       - Squash and merge",
+    "  [3] Rebase       - Rebase and merge",
+    "",
+    "  [q] Cancel",
+  }
+
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.api.nvim_buf_set_option(buf, "modifiable", false)
+
+  local width = 50
+  local height = #lines + 1
+
+  local win = vim.api.nvim_open_win(buf, true, {
+    relative = "editor",
+    row = math.floor((vim.o.lines - height) / 2),
+    col = math.floor((vim.o.columns - width) / 2),
+    width = width,
+    height = height,
+    style = "minimal",
+    border = "rounded",
+    title = " Merge PR ",
+    title_pos = "center",
+  })
+
+  -- Highlight the title
+  vim.api.nvim_buf_call(buf, function()
+    vim.fn.matchadd("Title", "^Select merge method.*")
+    vim.fn.matchadd("Number", "\\[1\\]\\|\\[2\\]\\|\\[3\\]")
+    vim.fn.matchadd("Comment", "\\[q\\]")
+  end)
+
+  local function do_merge(method)
+    vim.api.nvim_win_close(win, true)
+    vim.cmd("PRReview " .. method)
+  end
+
+  -- Keymaps for selection
+  vim.keymap.set("n", "1", function() do_merge("merge") end, { buffer = buf, noremap = true, silent = true })
+  vim.keymap.set("n", "2", function() do_merge("squash") end, { buffer = buf, noremap = true, silent = true })
+  vim.keymap.set("n", "3", function() do_merge("rebase") end, { buffer = buf, noremap = true, silent = true })
+  vim.keymap.set("n", "<CR>", function()
+    local cursor_line = vim.fn.line(".")
+    if cursor_line == 3 then do_merge("merge")
+    elseif cursor_line == 4 then do_merge("squash")
+    elseif cursor_line == 5 then do_merge("rebase")
+    end
+  end, { buffer = buf, noremap = true, silent = true })
+  vim.keymap.set("n", "q", function() vim.api.nvim_win_close(win, true) end, { buffer = buf, noremap = true, silent = true })
+  vim.keymap.set("n", "<Esc>", function() vim.api.nvim_win_close(win, true) end, { buffer = buf, noremap = true, silent = true })
+end
+
 --- All PR review keymaps (simplified)
 M.keymaps = {
   { mode = "n", lhs = "nn", rhs = function() M.next_point() end, desc = "Next diff/comment" },
@@ -326,6 +400,7 @@ M.keymaps = {
   { mode = "n", lhs = "cc", rhs = function() M.comment_at_cursor() end, desc = "Comment at cursor" },
   { mode = "n", lhs = "<leader>dd", rhs = function() M.show_description() end, desc = "Show PR description" },
   { mode = "n", lhs = "<leader>ll", rhs = function() M.list_comments() end, desc = "List all PR comments" },
+  { mode = "n", lhs = "<leader>rr", rhs = function() M.merge_picker() end, desc = "Merge PR (pick method)" },
 }
 
 --- Setup all keymaps for PR review mode

@@ -84,6 +84,7 @@ cp app/.build/release/PRReviewSystem ~/.local/bin/
 | `cc` | Open comment thread (view/edit/add) |
 | `<leader>dd` | Show PR description |
 | `<leader>ll` | List all PR comments |
+| `<leader>rr` | Merge PR (pick method) |
 
 ### Comment Windows
 | Key | Action |
@@ -99,7 +100,9 @@ cp app/.build/release/PRReviewSystem ~/.local/bin/
 | `:PRReview list` | List all PR comments (grouped by file) |
 | `:PRReview open {url}` | Open PR for review |
 | `:PRReview sync` | Force sync with remote |
-| `:PRReview merge` | Merge the PR |
+| `:PRReview merge` | Merge the PR (merge commit) |
+| `:PRReview squash` | Squash and merge the PR |
+| `:PRReview rebase` | Rebase and merge the PR |
 | `:PRReview close` | Close review session |
 | `:PRReview config` | Edit config file |
 
