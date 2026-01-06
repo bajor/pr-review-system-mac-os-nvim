@@ -312,6 +312,11 @@ function M.show_description()
   ui.show_description()
 end
 
+--- Show all PR comments
+function M.list_comments()
+  comments.list_comments()
+end
+
 --- All PR review keymaps (simplified)
 M.keymaps = {
   { mode = "n", lhs = "nn", rhs = function() M.next_point() end, desc = "Next diff/comment" },
@@ -320,6 +325,7 @@ M.keymaps = {
   { mode = "n", lhs = "pt", rhs = function() M.prev_thread() end, desc = "Previous comment thread" },
   { mode = "n", lhs = "cc", rhs = function() M.comment_at_cursor() end, desc = "Comment at cursor" },
   { mode = "n", lhs = "<leader>dd", rhs = function() M.show_description() end, desc = "Show PR description" },
+  { mode = "n", lhs = "<leader>ll", rhs = function() M.list_comments() end, desc = "List all PR comments" },
 }
 
 --- Setup all keymaps for PR review mode

@@ -12,6 +12,7 @@ A complete PR code review system for GitHub, consisting of:
 | `nn` / `pp` | Next/previous diff or comment |
 | `nt` / `pt` | Next/previous comment thread |
 | `cc` | Open/create comment at cursor |
+| `<leader>ll` | List all PR comments |
 | `s` | Save comment |
 | `r` | Resolve thread |
 | `q` | Close window |

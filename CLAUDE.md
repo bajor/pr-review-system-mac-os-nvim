@@ -83,6 +83,7 @@ cp app/.build/release/PRReviewSystem ~/.local/bin/
 | `pt` | Previous comment thread (across all files) |
 | `cc` | Open comment thread (view/edit/add) |
 | `<leader>dd` | Show PR description |
+| `<leader>ll` | List all PR comments |
 
 ### Comment Windows
 | Key | Action |

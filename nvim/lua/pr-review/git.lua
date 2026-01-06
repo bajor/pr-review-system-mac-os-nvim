@@ -293,4 +293,98 @@ function M.count_commits_behind(path, base_branch, callback)
   })
 end
 
+--- Check if merging with base branch would have conflicts
+---@param path string Repository path
+---@param base_branch string Base branch to check against
+---@param callback fun(has_conflicts: boolean, conflict_files: string[]|nil, err: string|nil)
+function M.check_merge_conflicts(path, base_branch, callback)
+  -- Get merge-base first
+  run_git({ "merge-base", "HEAD", "origin/" .. base_branch }, {
+    cwd = path,
+    on_exit = function(base_code, base_stdout, _)
+      if base_code ~= 0 or #base_stdout == 0 then
+        callback(false, nil, "Failed to find merge base")
+        return
+      end
+
+      local merge_base = base_stdout[1]
+
+      -- Use git merge-tree to check for conflicts without actually merging
+      run_git({ "merge-tree", merge_base, "HEAD", "origin/" .. base_branch }, {
+        cwd = path,
+        on_exit = function(_, stdout, _)
+          local conflict_files = {}
+          local in_conflict = false
+
+          for _, line in ipairs(stdout) do
+            -- merge-tree outputs conflict markers
+            if line:match("^changed in both") or line:match("^CONFLICT") then
+              in_conflict = true
+            end
+            -- Extract file names from conflict output
+            local file = line:match("^%s+base%s+%d+%s+%x+%s+(.+)$")
+            if not file then
+              file = line:match("CONFLICT.*: (.+)$")
+            end
+            if file and not vim.tbl_contains(conflict_files, file) then
+              table.insert(conflict_files, file)
+            end
+          end
+
+          -- Also try a simpler check - if merge-tree output contains "<<<" markers
+          local output_str = table.concat(stdout, "\n")
+          if output_str:match("<<<<<<") or output_str:match("changed in both") then
+            in_conflict = true
+          end
+
+          callback(in_conflict, in_conflict and conflict_files or nil, nil)
+        end,
+      })
+    end,
+  })
+end
+
+--- Get full sync status (behind count + conflict check)
+---@param path string Repository path
+---@param base_branch string Base branch
+---@param callback fun(status: table) status = {behind: number, has_conflicts: boolean, conflict_files: string[]}
+function M.get_sync_status(path, base_branch, callback)
+  local status = {
+    behind = 0,
+    has_conflicts = false,
+    conflict_files = {},
+    checked = false,
+  }
+
+  -- Fetch base branch first
+  run_git({ "fetch", "origin", base_branch }, {
+    cwd = path,
+    on_exit = function(fetch_code, _, _)
+      if fetch_code ~= 0 then
+        status.error = "Failed to fetch"
+        callback(status)
+        return
+      end
+
+      -- Count commits behind
+      run_git({ "rev-list", "--count", "HEAD..origin/" .. base_branch }, {
+        cwd = path,
+        on_exit = function(code, stdout, _)
+          if code == 0 and #stdout > 0 then
+            status.behind = tonumber(stdout[1]) or 0
+          end
+
+          -- Check for conflicts
+          M.check_merge_conflicts(path, base_branch, function(has_conflicts, conflict_files, _)
+            status.has_conflicts = has_conflicts
+            status.conflict_files = conflict_files or {}
+            status.checked = true
+            callback(status)
+          end)
+        end,
+      })
+    end,
+  })
+end
+
 return M

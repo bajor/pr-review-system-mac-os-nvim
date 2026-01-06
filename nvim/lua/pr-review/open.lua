@@ -19,6 +19,7 @@ local last_known_sha = nil
 
 --- How many commits behind base branch
 local commits_behind = 0
+local has_conflicts = false
 
 --- Get how many commits behind base branch
 ---@return number
@@ -26,9 +27,20 @@ function M.get_commits_behind()
   return commits_behind
 end
 
---- Setup the winbar warning highlight group
+--- Get if there are merge conflicts
+---@return boolean
+function M.has_merge_conflicts()
+  return has_conflicts
+end
+
+--- Setup the winbar warning highlight groups
 local function setup_warning_highlight()
-  vim.api.nvim_set_hl(0, "PRReviewWarning", { fg = "#ffffff", bg = "#cc0000", bold = true })
+  -- Yellow/orange for out of sync (same as comment highlight)
+  vim.api.nvim_set_hl(0, "PRReviewWarning", { fg = "#ffcc00", bg = "#4a3d00", bold = true })
+  -- Red for conflicts
+  vim.api.nvim_set_hl(0, "PRReviewConflict", { fg = "#ffffff", bg = "#8b0000", bold = true })
+  -- Green for in sync
+  vim.api.nvim_set_hl(0, "PRReviewOk", { fg = "#88cc88", bg = "#1a3d1a", bold = true })
 end
 
 --- Update the winbar to show sync status
@@ -37,10 +49,25 @@ local function update_winbar()
   local pr = state.get_pr()
   if not pr then return end
 
+  local parts = {}
+
+  -- Conflict warning (highest priority - red)
+  if has_conflicts then
+    table.insert(parts, "%#PRReviewConflict# ⛔ MERGE CONFLICTS %*")
+  end
+
+  -- Behind warning (yellow)
   if commits_behind > 0 then
     local plural = commits_behind == 1 and "commit" or "commits"
-    vim.wo.winbar = string.format("%%#PRReviewWarning# OUT OF SYNC: %d %s behind %s - run :PRReview sync %%*",
-      commits_behind, plural, pr.base.ref)
+    table.insert(parts, string.format("%%#PRReviewWarning# ⚠ %d %s behind %s %%*",
+      commits_behind, plural, pr.base.ref))
+  end
+
+  -- Show status
+  if #parts > 0 then
+    vim.wo.winbar = table.concat(parts, " ")
+  elseif commits_behind == 0 and not has_conflicts then
+    vim.wo.winbar = "%#PRReviewOk# ✓ In sync with " .. pr.base.ref .. " %*"
   else
     vim.wo.winbar = ""
   end
@@ -405,13 +432,16 @@ function M.open_pr(url)
         return
       end
 
-      -- Check if behind base branch
+      -- Check sync status with base branch (behind count + conflicts)
       local base_branch = pr.base.ref
-      git.count_commits_behind(clone_path, base_branch, function(behind, behind_err)
-        if not behind_err and behind then
-          commits_behind = behind
+      git.get_sync_status(clone_path, base_branch, function(sync_status)
+        if sync_status.checked then
+          commits_behind = sync_status.behind
+          has_conflicts = sync_status.has_conflicts
+          state.set_sync_status(sync_status)
         else
           commits_behind = 0
+          has_conflicts = false
         end
       end)
 
@@ -460,6 +490,7 @@ function M.close_pr()
   stop_sync_timer()
   last_known_sha = nil
   commits_behind = 0
+  has_conflicts = false
 
   -- Clear winbar
   vim.wo.winbar = ""

@@ -26,6 +26,13 @@ M.session = {
   comments = {},
   --- Buffers created for this session
   buffers = {},
+  --- Sync status with base branch
+  sync_status = {
+    behind = 0,
+    has_conflicts = false,
+    conflict_files = {},
+    checked = false,
+  },
 }
 
 --- Reset the session state
@@ -42,6 +49,12 @@ function M.reset()
     current_file = 1,
     comments = {},
     buffers = {},
+    sync_status = {
+      behind = 0,
+      has_conflicts = false,
+      conflict_files = {},
+      checked = false,
+    },
   }
 end
 
@@ -175,6 +188,49 @@ end
 ---@return number|nil
 function M.get_number()
   return M.session.number
+end
+
+--- Get sync status
+---@return table
+function M.get_sync_status()
+  return M.session.sync_status
+end
+
+--- Set sync status
+---@param status table
+function M.set_sync_status(status)
+  M.session.sync_status = status
+end
+
+--- Get statusline component string
+---@return string
+function M.get_statusline_component()
+  if not M.session.active then
+    return ""
+  end
+
+  local parts = {}
+  local sync = M.session.sync_status
+
+  if not sync.checked then
+    return ""
+  end
+
+  -- Show behind count
+  if sync.behind > 0 then
+    table.insert(parts, string.format("⚠ %d behind", sync.behind))
+  end
+
+  -- Show conflict warning
+  if sync.has_conflicts then
+    table.insert(parts, "⛔ CONFLICTS")
+  end
+
+  if #parts == 0 then
+    return "✓ In sync"
+  end
+
+  return table.concat(parts, " │ ")
 end
 
 return M
