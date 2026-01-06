@@ -98,10 +98,8 @@ cp app/.build/release/PRReviewSystem ~/.local/bin/
 |---------|-------------|
 | `:PRReview list` | List all PR comments (grouped by file) |
 | `:PRReview open {url}` | Open PR for review |
-| `:PRReview submit` | Submit review |
 | `:PRReview sync` | Force sync with remote |
-| `:PRReview update` | Alias for sync |
-| `:PRReview refresh` | Alias for sync |
+| `:PRReview merge` | Merge the PR |
 | `:PRReview close` | Close review session |
 | `:PRReview config` | Edit config file |
 

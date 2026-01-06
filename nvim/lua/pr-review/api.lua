@@ -337,4 +337,36 @@ function M.parse_pr_url(url)
   return nil, nil, nil
 end
 
+--- Merge a pull request
+---@param owner string Repository owner
+---@param repo string Repository name
+---@param number number PR number
+---@param opts table|nil Options: merge_method ("merge"|"squash"|"rebase"), commit_title, commit_message
+---@param token string GitHub token
+---@param callback fun(result: table|nil, err: string|nil)
+function M.merge_pr(owner, repo, number, opts, token, callback)
+  opts = opts or {}
+  local url = string.format("%s/repos/%s/%s/pulls/%d/merge", M.base_url, owner, repo, number)
+
+  vim.schedule(function()
+    local result, err = request({
+      url = url,
+      method = "PUT",
+      token = token,
+      body = {
+        merge_method = opts.merge_method or "merge",
+        commit_title = opts.commit_title,
+        commit_message = opts.commit_message,
+      },
+    })
+
+    if err then
+      callback(nil, err)
+      return
+    end
+
+    callback(result and result.data, nil)
+  end)
+end
+
 return M

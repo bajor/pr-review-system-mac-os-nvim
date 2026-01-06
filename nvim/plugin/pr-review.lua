@@ -10,7 +10,7 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   local subcommand = args[1]
 
   if not subcommand then
-    vim.notify("Usage: :PRReview <list|description|sync|approve|close>", vim.log.levels.WARN)
+    vim.notify("Usage: :PRReview <list|description|sync|merge|close>", vim.log.levels.WARN)
     return
   end
 
@@ -35,9 +35,53 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   elseif subcommand == "close" then
     local pr_open = require("pr-review.open")
     pr_open.close_pr()
-  elseif subcommand == "approve" then
-    local pr_review = require("pr-review.review")
-    pr_review.quick_approve(false)
+  elseif subcommand == "merge" then
+    local state = require("pr-review.state")
+    local api = require("pr-review.api")
+    local config = require("pr-review.config")
+
+    if not state.is_active() then
+      vim.notify("No active PR review session", vim.log.levels.WARN)
+      return
+    end
+
+    local owner = state.get_owner()
+    local repo = state.get_repo()
+    local number = state.get_number()
+    local pr = state.get_pr()
+
+    -- Check for conflicts first
+    local sync_status = state.get_sync_status()
+    if sync_status.has_conflicts then
+      vim.notify("Cannot merge: PR has merge conflicts", vim.log.levels.ERROR)
+      return
+    end
+
+    local cfg, cfg_err = config.load()
+    if cfg_err then
+      vim.notify("Config error: " .. cfg_err, vim.log.levels.ERROR)
+      return
+    end
+
+    local token = config.get_token_for_owner(cfg, owner)
+
+    vim.notify("Merging PR #" .. number .. "...", vim.log.levels.INFO)
+
+    api.merge_pr(owner, repo, number, {
+      merge_method = "merge",
+      commit_title = pr.title,
+    }, token, function(result, err)
+      vim.schedule(function()
+        if err then
+          vim.notify("Merge failed: " .. err, vim.log.levels.ERROR)
+          return
+        end
+        vim.notify("PR #" .. number .. " merged successfully!", vim.log.levels.INFO)
+        -- Close the review session after merge
+        local pr_open = require("pr-review.open")
+        pr_open.close_pr()
+      end)
+    end)
   elseif subcommand == "config" then
     -- Open config file in current buffer
     local config_path = vim.fn.expand("~/.config/pr-review/config.json")
@@ -81,7 +125,7 @@ end, {
     local args = vim.split(cmdline, "%s+")
     if #args == 2 then
       -- Complete subcommands
-      return { "list", "description", "sync", "approve", "close", "config" }
+      return { "list", "description", "sync", "merge", "close", "config" }
     end
     return {}
   end,

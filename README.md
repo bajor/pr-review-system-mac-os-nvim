@@ -138,10 +138,10 @@ Once running, you'll see **"PR"** (or **"PR N"** where N is the count) in your m
 
 | Command | Description |
 |---------|-------------|
-| `:PRReview list` | Show all diffs and comments in current PR |
+| `:PRReview list` | Show all comments in current PR |
 | `:PRReview description` | Show PR description in floating window |
 | `:PRReview sync` | Force sync PR with remote (fetch latest) |
-| `:PRReview approve` | Approve PR (blocks if out of sync) |
+| `:PRReview merge` | Merge the PR (blocks if conflicts) |
 | `:PRReview close` | Exit review mode |
 | `:PRReview config` | Open config file for editing |
 
