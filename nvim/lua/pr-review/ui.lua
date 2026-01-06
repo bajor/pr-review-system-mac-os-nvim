@@ -11,6 +11,7 @@ M.state = {
   buf = nil,
   prs = {},
   selected = 1,
+  description_win = nil,
 }
 
 --- Create a centered floating window
@@ -399,8 +400,15 @@ function M.fetch_all_prs(callback)
   end
 end
 
---- Show PR description in a floating window
+--- Show PR description in a floating window (toggle)
 function M.show_description()
+  -- If description window is already open, close it (toggle off)
+  if M.state.description_win and vim.api.nvim_win_is_valid(M.state.description_win) then
+    vim.api.nvim_win_close(M.state.description_win, true)
+    M.state.description_win = nil
+    return
+  end
+
   local state = require("pr-review.state")
 
   if not state.is_active() then
@@ -445,6 +453,9 @@ function M.show_description()
     border = "rounded",
   })
 
+  -- Store window handle for toggle
+  M.state.description_win = win
+
   -- Set content
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -452,13 +463,15 @@ function M.show_description()
   vim.bo[buf].filetype = "markdown"
   vim.wo[win].wrap = true
 
-  -- Close keymaps
+  -- Close keymaps (also clear state)
   local opts = { buffer = buf, noremap = true, silent = true }
   vim.keymap.set("n", "q", function()
     vim.api.nvim_win_close(win, true)
+    M.state.description_win = nil
   end, opts)
   vim.keymap.set("n", "<Esc>", function()
     vim.api.nvim_win_close(win, true)
+    M.state.description_win = nil
   end, opts)
 end
 
