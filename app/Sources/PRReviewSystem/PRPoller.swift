@@ -53,8 +53,10 @@ public final class PRPoller: @unchecked Sendable {
     // MARK: - Private Helpers
 
     /// Create a GitHub API client for the given owner
-    private func api(for owner: String) -> GitHubAPI {
+    /// Returns nil if no valid token exists for this owner
+    private func api(for owner: String) -> GitHubAPI? {
         let token = config.resolveToken(for: owner)
+        guard !token.isEmpty else { return nil }
         return GitHubAPI(token: token)
     }
 
@@ -191,8 +193,8 @@ public final class PRPoller: @unchecked Sendable {
             let owner = String(parts[0])
             let repoName = String(parts[1])
 
-            // Get API with owner-specific token
-            let repoAPI = api(for: owner)
+            // Get API with owner-specific token (skip if no valid token)
+            guard let repoAPI = api(for: owner) else { continue }
 
             do {
                 let prs = try await repoAPI.listPRs(owner: owner, repo: repoName)

@@ -108,9 +108,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Create a GitHub API client for the given owner/org
     /// Uses the owner-specific token if configured, otherwise the default token
+    /// Returns nil if no valid token exists for this owner
     private func api(for owner: String) -> GitHubAPI? {
         guard let config = config else { return nil }
         let token = config.resolveToken(for: owner)
+        guard !token.isEmpty else { return nil }
         return GitHubAPI(token: token)
     }
 
