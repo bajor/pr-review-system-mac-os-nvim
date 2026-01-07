@@ -32,8 +32,11 @@ public final class PRPoller: @unchecked Sendable {
     /// Last known PR states (repo -> [pr number -> state])
     private var lastKnownStates: [String: [Int: PRState]] = [:]
 
-    /// Cached discovered repos (when config.repos is empty)
-    private var discoveredRepos: [String]?
+    /// Cached discovered repos with their tokens (when config.repos is empty)
+    private var discoveredRepos: [(repo: String, token: String)]?
+
+    /// Current repo -> token mapping for easy lookup
+    private var repoTokenMap: [String: String] = [:]
 
     /// Change handler callback
     private var onChanges: ChangeHandler?
@@ -61,17 +64,19 @@ public final class PRPoller: @unchecked Sendable {
     }
 
     /// Discover all repos accessible by configured tokens
-    private func discoverRepos() async -> [String] {
-        var allRepos: Set<String> = []
+    /// Returns array of (repo, token) tuples so we can use the correct token when fetching PRs
+    private func discoverRepos() async -> [(repo: String, token: String)] {
+        var discoveredRepos: [(repo: String, token: String)] = []
 
-        await withTaskGroup(of: [String].self) { group in
+        await withTaskGroup(of: [(repo: String, token: String)].self) { group in
             // Discover repos from each token in the tokens map
             for (_, token) in config.tokens {
+                let capturedToken = token
                 group.addTask {
-                    let api = GitHubAPI(token: token)
+                    let api = GitHubAPI(token: capturedToken)
                     do {
                         let repos = try await api.listRepos()
-                        return repos.map { $0.fullName }
+                        return repos.map { (repo: $0.fullName, token: capturedToken) }
                     } catch {
                         print("Error discovering repos: \(error)")
                         return []
@@ -83,11 +88,12 @@ public final class PRPoller: @unchecked Sendable {
             if !config.githubToken.isEmpty {
                 let tokenAlreadyUsed = config.tokens.values.contains(config.githubToken)
                 if !tokenAlreadyUsed {
+                    let defaultToken = config.githubToken
                     group.addTask {
-                        let api = GitHubAPI(token: self.config.githubToken)
+                        let api = GitHubAPI(token: defaultToken)
                         do {
                             let repos = try await api.listRepos()
-                            return repos.map { $0.fullName }
+                            return repos.map { (repo: $0.fullName, token: defaultToken) }
                         } catch {
                             print("Error discovering repos with default token: \(error)")
                             return []
@@ -96,33 +102,58 @@ public final class PRPoller: @unchecked Sendable {
                 }
             }
 
-            for await repos in group {
-                for repo in repos {
-                    allRepos.insert(repo)
-                }
+            for await results in group {
+                discoveredRepos.append(contentsOf: results)
             }
         }
 
-        return Array(allRepos).sorted()
+        // Dedupe by repo name (keep first token found for each repo)
+        var seen: Set<String> = []
+        let deduped = discoveredRepos.filter { seen.insert($0.repo).inserted }
+
+        // Filter to only show repos from hardcoded owners
+        let allowedOwners: Set<String> = ["bajor", "twojstarysolutions"]
+        let filtered = deduped.filter { item in
+            let owner = item.repo.split(separator: "/").first.map(String.init) ?? ""
+            return allowedOwners.contains(owner)
+        }
+
+        return filtered.sorted { $0.repo < $1.repo }
     }
 
-    /// Get repos to poll - either from config or auto-discovered
-    private func getReposToPoll() async -> [String] {
+    /// Get repos to poll with their tokens
+    /// For explicit config.repos, resolve tokens via config.resolveToken
+    /// For auto-discovered repos, use the token that discovered them
+    private func getReposToPoll() async -> [(repo: String, token: String)] {
+        let reposWithTokens: [(repo: String, token: String)]
+
         if !config.repos.isEmpty {
-            return config.repos
+            // Use explicit repos from config, resolve tokens
+            reposWithTokens = config.repos.compactMap { repo -> (repo: String, token: String)? in
+                let parts = repo.split(separator: "/")
+                guard parts.count == 2 else { return nil }
+                let owner = String(parts[0])
+                let token = config.resolveToken(for: owner)
+                guard !token.isEmpty else { return nil }
+                return (repo: repo, token: token)
+            }
+        } else if let cached = stateQueue.sync(execute: { discoveredRepos }) {
+            reposWithTokens = cached
+        } else {
+            // Discover repos
+            let discovered = await discoverRepos()
+            stateQueue.sync {
+                discoveredRepos = discovered
+            }
+            reposWithTokens = discovered
         }
 
-        // Check cache first
-        if let cached = stateQueue.sync(execute: { discoveredRepos }) {
-            return cached
-        }
-
-        // Discover repos
-        let discovered = await discoverRepos()
+        // Build repo -> token mapping for later use
         stateQueue.sync {
-            discoveredRepos = discovered
+            repoTokenMap = Dictionary(uniqueKeysWithValues: reposWithTokens.map { ($0.repo, $0.token) })
         }
-        return discovered
+
+        return reposWithTokens
     }
 
     // MARK: - Public API
@@ -185,16 +216,16 @@ public final class PRPoller: @unchecked Sendable {
     private func poll() async {
         var allChanges: [PRChange] = []
 
-        let reposToPoll = await getReposToPoll()
+        let reposWithTokens = await getReposToPoll()
 
-        for repo in reposToPoll {
+        for (repo, token) in reposWithTokens {
             let parts = repo.split(separator: "/")
             guard parts.count == 2 else { continue }
             let owner = String(parts[0])
             let repoName = String(parts[1])
 
-            // Get API with owner-specific token (skip if no valid token)
-            guard let repoAPI = api(for: owner) else { continue }
+            // Use the token associated with this repo
+            let repoAPI = GitHubAPI(token: token)
 
             do {
                 let prs = try await repoAPI.listPRs(owner: owner, repo: repoName)

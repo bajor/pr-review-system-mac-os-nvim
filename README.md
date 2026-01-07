@@ -87,7 +87,7 @@ Create `~/.config/pr-review/config.json`:
 
 **Token resolution:** When accessing a repo, the app checks if the owner/org exists in the `tokens` map. If found, that token is used; otherwise falls back to `github_token`.
 
-**Auto-discovery:** If `repos` is not specified, the app auto-discovers all accessible repos from your tokens (archived repos are excluded).
+**Auto-discovery:** If `repos` is not specified, the app auto-discovers repos from your tokens. Currently hardcoded to only show repos from `bajor` and `twojstarysolutions` owners (see `AppDelegate.swift` and `PRPoller.swift` to modify).
 
 ### Notification Sound
 

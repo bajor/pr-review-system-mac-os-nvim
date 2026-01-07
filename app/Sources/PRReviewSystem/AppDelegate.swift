@@ -38,8 +38,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Interval for auto-refreshing PRs (15 minutes)
     private let autoRefreshInterval: TimeInterval = 15 * 60
 
-    /// Cached discovered repos (to avoid re-discovering on every refresh)
-    private var cachedRepos: [String]?
+    /// Cached discovered repos with their tokens (to avoid re-discovering on every refresh)
+    private var cachedRepos: [(repo: String, token: String)]?
+
+    /// Current repo -> token mapping (built from reposWithTokens during refresh)
+    private var repoTokenMap: [String: String] = [:]
 
     // MARK: - Application Lifecycle
 
@@ -117,21 +120,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Discover all repos accessible by configured tokens
-    /// Returns array of "owner/repo" strings
-    private func discoverRepos() async -> [String] {
+    /// Returns array of (repo, token) tuples so we can use the correct token when fetching PRs
+    private func discoverRepos() async -> [(repo: String, token: String)] {
         guard let config = config else { return [] }
 
-        var discoveredRepos: Set<String> = []
+        var discoveredRepos: [(repo: String, token: String)] = []
 
         // Discover repos from each token in the tokens map
-        await withTaskGroup(of: [String].self) { group in
+        await withTaskGroup(of: [(repo: String, token: String)].self) { group in
             for (_, token) in config.tokens {
+                let capturedToken = token
                 group.addTask {
-                    let api = GitHubAPI(token: token)
+                    let api = GitHubAPI(token: capturedToken)
                     do {
                         let repos = try await api.listRepos()
-                        // Filter out archived repos
-                        return repos.filter { $0.archived != true }.map { $0.fullName }
+                        // Filter out archived repos, include token that discovered each repo
+                        return repos.filter { $0.archived != true }.map { (repo: $0.fullName, token: capturedToken) }
                     } catch {
                         print("Error discovering repos: \(error)")
                         return []
@@ -143,12 +147,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             if !config.githubToken.isEmpty {
                 let tokenAlreadyUsed = config.tokens.values.contains(config.githubToken)
                 if !tokenAlreadyUsed {
+                    let defaultToken = config.githubToken
                     group.addTask {
-                        let api = GitHubAPI(token: config.githubToken)
+                        let api = GitHubAPI(token: defaultToken)
                         do {
                             let repos = try await api.listRepos()
-                            // Filter out archived repos
-                            return repos.filter { $0.archived != true }.map { $0.fullName }
+                            // Filter out archived repos, include token that discovered each repo
+                            return repos.filter { $0.archived != true }.map { (repo: $0.fullName, token: defaultToken) }
                         } catch {
                             print("Error discovering repos with default token: \(error)")
                             return []
@@ -157,14 +162,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            for await repos in group {
-                for repo in repos {
-                    discoveredRepos.insert(repo)
-                }
+            for await results in group {
+                discoveredRepos.append(contentsOf: results)
             }
         }
 
-        return Array(discoveredRepos).sorted()
+        // Dedupe by repo name (keep first token found for each repo)
+        var seen: Set<String> = []
+        let deduped = discoveredRepos.filter { seen.insert($0.repo).inserted }
+
+        // Filter to only show repos from hardcoded owners
+        let allowedOwners: Set<String> = ["bajor", "twojstarysolutions"]
+        let filtered = deduped.filter { item in
+            let owner = item.repo.split(separator: "/").first.map(String.init) ?? ""
+            return allowedOwners.contains(owner)
+        }
+
+        return filtered.sorted { $0.repo < $1.repo }
     }
 
     private func runCleanupIfNeeded() {
@@ -349,31 +363,45 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // Determine which repos to check - use config.repos if specified, otherwise auto-discover
-        let reposToCheck: [String]
+        // Determine which repos to check with their tokens
+        // For explicit config.repos, resolve token via api(for:)
+        // For auto-discovered repos, use the token that discovered them
+        let reposWithTokens: [(repo: String, token: String)]
         if !config.repos.isEmpty {
-            reposToCheck = config.repos
+            // Use explicit repos from config, resolve tokens
+            reposWithTokens = config.repos.compactMap { repo -> (repo: String, token: String)? in
+                let parts = repo.split(separator: "/")
+                guard parts.count == 2 else { return nil }
+                let owner = String(parts[0])
+                let token = config.resolveToken(for: owner)
+                guard !token.isEmpty else { return nil }
+                return (repo: repo, token: token)
+            }
         } else if let cached = cachedRepos {
-            reposToCheck = cached
+            reposWithTokens = cached
         } else {
             let discovered = await discoverRepos()
             cachedRepos = discovered
             print("Auto-discovered \(discovered.count) repos")
-            reposToCheck = discovered
+            reposWithTokens = discovered
         }
+
+        // Build repo -> token mapping for later use (commit/check fetching)
+        repoTokenMap = Dictionary(uniqueKeysWithValues: reposWithTokens.map { ($0.repo, $0.token) })
 
         // Fetch all PRs and issues in parallel
         let (allPRs, allIssues) = await withTaskGroup(of: (prs: (String, [PRDisplayInfo])?, issues: (String, [IssueDisplayInfo])?)?.self) { group in
-            for repo in reposToCheck {
-                group.addTask { [self] in
+            for (repo, token) in reposWithTokens {
+                let capturedToken = token
+                group.addTask {
                     // Parse owner/repo from the repo string
                     let parts = repo.split(separator: "/")
                     guard parts.count == 2 else { return nil }
                     let owner = String(parts[0])
                     let repoName = String(parts[1])
 
-                    // Get API with owner-specific token
-                    guard let api = self.api(for: owner) else { return nil }
+                    // Use the token associated with this repo
+                    let api = GitHubAPI(token: capturedToken)
 
                     // Fetch PRs
                     var prResult: (String, [PRDisplayInfo])? = nil
@@ -432,8 +460,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             let owner = String(parts[0])
             let repoName = String(parts[1])
 
-            // Get API with owner-specific token
-            guard let api = api(for: owner) else { continue }
+            // Get token from our repo -> token map
+            guard let token = repoTokenMap[repo] else { continue }
+            let api = GitHubAPI(token: token)
 
             for prInfo in prInfos {
                 // Fetch commit message
@@ -468,7 +497,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Fetch check status for a single PR
     private func fetchCheckStatus(for pr: PullRequest, in repo: String, owner: String, repoName: String) async {
-        guard let api = api(for: owner) else { return }
+        guard let token = repoTokenMap[repo] else { return }
+        let api = GitHubAPI(token: token)
 
         do {
             let status = try await api.getCheckStatus(owner: owner, repo: repoName, ref: pr.head.sha)
