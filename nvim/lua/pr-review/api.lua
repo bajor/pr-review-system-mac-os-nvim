@@ -326,9 +326,12 @@ function M.submit_review(owner, repo, number, event, body, token, callback)
 end
 
 --- Parse a GitHub PR URL to extract owner, repo, and number
----@param url string GitHub PR URL
+---@param url string|nil GitHub PR URL
 ---@return string|nil owner, string|nil repo, number|nil number
 function M.parse_pr_url(url)
+  if not url then
+    return nil, nil, nil
+  end
   -- Match: https://github.com/owner/repo/pull/123
   local owner, repo, num = url:match("github%.com/([^/]+)/([^/]+)/pull/(%d+)")
   if owner and repo and num then

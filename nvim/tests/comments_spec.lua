@@ -179,3 +179,291 @@ describe("pr-review.comments", function()
     end)
   end)
 end)
+
+-- Comment navigation tests with actual data
+describe("pr-review.comments navigation", function()
+  local mock_comments = {
+    { id = 1, path = "src/main.lua", line = 10, body = "Fix this", user = { login = "reviewer1" } },
+    { id = 2, path = "src/main.lua", line = 25, body = "Also here", user = { login = "reviewer1" } },
+    { id = 3, path = "src/main.lua", line = 50, body = "Third comment", user = { login = "reviewer2" } },
+  }
+
+  before_each(function()
+    state.reset()
+    state.start({
+      owner = "test",
+      repo = "test",
+      number = 1,
+      url = "https://github.com/test/test/pull/1",
+      clone_path = "/tmp/test",
+    })
+    state.set_files({
+      { filename = "src/main.lua", status = "modified" },
+    })
+    state.set_comments("src/main.lua", mock_comments)
+  end)
+
+  after_each(function()
+    state.reset()
+  end)
+
+  describe("get_buffer_comments with data", function()
+    it("returns comments for current file", function()
+      -- State starts at file index 1 by default
+      local file_comments = state.get_comments("src/main.lua")
+      assert.equals(3, #file_comments)
+    end)
+
+    it("returns comments sorted by line", function()
+      local file_comments = state.get_comments("src/main.lua")
+      assert.equals(10, file_comments[1].line)
+      assert.equals(25, file_comments[2].line)
+      assert.equals(50, file_comments[3].line)
+    end)
+
+    it("returns empty for non-existent file", function()
+      local file_comments = state.get_comments("nonexistent.lua")
+      assert.is_table(file_comments)
+      assert.equals(0, #file_comments)
+    end)
+  end)
+
+  describe("comment count tracking", function()
+    it("counts comments per file", function()
+      local file_comments = state.get_comments("src/main.lua")
+      assert.equals(3, #file_comments)
+    end)
+
+    it("can add more comments", function()
+      local file_comments = state.get_comments("src/main.lua")
+      table.insert(file_comments, {
+        id = 4,
+        path = "src/main.lua",
+        line = 100,
+        body = "New comment",
+        user = { login = "reviewer3" },
+      })
+      state.set_comments("src/main.lua", file_comments)
+
+      local updated = state.get_comments("src/main.lua")
+      assert.equals(4, #updated)
+    end)
+
+    it("can clear comments for file", function()
+      state.set_comments("src/main.lua", {})
+      local file_comments = state.get_comments("src/main.lua")
+      assert.equals(0, #file_comments)
+    end)
+  end)
+end)
+
+-- Multi-file comment tests
+describe("pr-review.comments multi-file", function()
+  before_each(function()
+    state.reset()
+    state.start({
+      owner = "test",
+      repo = "test",
+      number = 1,
+      url = "https://github.com/test/test/pull/1",
+      clone_path = "/tmp/test",
+    })
+    state.set_files({
+      { filename = "src/main.lua", status = "modified" },
+      { filename = "src/utils.lua", status = "added" },
+      { filename = "tests/test.lua", status = "modified" },
+    })
+    state.set_comments("src/main.lua", {
+      { id = 1, path = "src/main.lua", line = 10, body = "Main comment 1" },
+      { id = 2, path = "src/main.lua", line = 20, body = "Main comment 2" },
+    })
+    state.set_comments("src/utils.lua", {
+      { id = 3, path = "src/utils.lua", line = 5, body = "Utils comment" },
+    })
+    -- tests/test.lua has no comments
+  end)
+
+  after_each(function()
+    state.reset()
+  end)
+
+  describe("comments across files", function()
+    it("tracks comments per file independently", function()
+      local main_comments = state.get_comments("src/main.lua")
+      local utils_comments = state.get_comments("src/utils.lua")
+      local test_comments = state.get_comments("tests/test.lua")
+
+      assert.equals(2, #main_comments)
+      assert.equals(1, #utils_comments)
+      assert.equals(0, #test_comments)
+    end)
+
+    it("file index is tracked", function()
+      -- State starts at file index 1 by default
+      assert.equals(1, state.get_current_file_index())
+
+      -- Navigate to next file
+      state.next_file()
+      assert.equals(2, state.get_current_file_index())
+    end)
+
+    it("can get current file", function()
+      -- State starts at file index 1 by default
+      local file = state.get_current_file()
+      assert.equals("src/main.lua", file.filename)
+    end)
+  end)
+
+  describe("pending comments tracking", function()
+    it("pending flag defaults to false", function()
+      local main_comments = state.get_comments("src/main.lua")
+      for _, comment in ipairs(main_comments) do
+        -- Comments from API don't have pending flag
+        assert.is_nil(comment.pending)
+      end
+    end)
+
+    it("can mark comments as pending", function()
+      local main_comments = state.get_comments("src/main.lua")
+      main_comments[1].pending = true
+      state.set_comments("src/main.lua", main_comments)
+
+      local pending = comments.get_pending_comments()
+      assert.equals(1, #pending)
+      -- get_pending_comments returns simplified objects with path, line, body
+      assert.equals("src/main.lua", pending[1].path)
+      assert.equals(10, pending[1].line)
+    end)
+  end)
+end)
+
+-- Comment edge cases
+describe("pr-review.comments edge cases", function()
+  before_each(function()
+    state.reset()
+  end)
+
+  describe("empty state handling", function()
+    it("get_pending_comments returns empty when no files", function()
+      state.start({
+        owner = "test",
+        repo = "test",
+        number = 1,
+        url = "https://github.com/test/test/pull/1",
+        clone_path = "/tmp/test",
+      })
+      state.set_files({})
+
+      local pending = comments.get_pending_comments()
+      assert.equals(0, #pending)
+    end)
+
+    it("handles file with nil comments", function()
+      state.start({
+        owner = "test",
+        repo = "test",
+        number = 1,
+        url = "https://github.com/test/test/pull/1",
+        clone_path = "/tmp/test",
+      })
+      state.set_files({ { filename = "test.lua" } })
+      -- Don't set comments for file
+
+      local file_comments = state.get_comments("test.lua")
+      assert.is_table(file_comments)
+      assert.equals(0, #file_comments)
+    end)
+  end)
+
+  describe("comment body content", function()
+    it("handles empty comment body", function()
+      state.start({
+        owner = "test",
+        repo = "test",
+        number = 1,
+        url = "https://github.com/test/test/pull/1",
+        clone_path = "/tmp/test",
+      })
+      state.set_files({ { filename = "test.lua" } })
+      state.set_comments("test.lua", {
+        { id = 1, path = "test.lua", line = 1, body = "" },
+      })
+
+      local file_comments = state.get_comments("test.lua")
+      assert.equals(1, #file_comments)
+      assert.equals("", file_comments[1].body)
+    end)
+
+    it("handles multiline comment body", function()
+      state.start({
+        owner = "test",
+        repo = "test",
+        number = 1,
+        url = "https://github.com/test/test/pull/1",
+        clone_path = "/tmp/test",
+      })
+      state.set_files({ { filename = "test.lua" } })
+      local multiline = "Line 1\nLine 2\nLine 3"
+      state.set_comments("test.lua", {
+        { id = 1, path = "test.lua", line = 1, body = multiline },
+      })
+
+      local file_comments = state.get_comments("test.lua")
+      assert.equals(multiline, file_comments[1].body)
+    end)
+
+    it("handles unicode in comment body", function()
+      state.start({
+        owner = "test",
+        repo = "test",
+        number = 1,
+        url = "https://github.com/test/test/pull/1",
+        clone_path = "/tmp/test",
+      })
+      state.set_files({ { filename = "test.lua" } })
+      local unicode = "Great work! 🎉 日本語テスト"
+      state.set_comments("test.lua", {
+        { id = 1, path = "test.lua", line = 1, body = unicode },
+      })
+
+      local file_comments = state.get_comments("test.lua")
+      assert.equals(unicode, file_comments[1].body)
+    end)
+  end)
+
+  describe("comment line numbers", function()
+    it("handles line 1", function()
+      state.start({
+        owner = "test",
+        repo = "test",
+        number = 1,
+        url = "https://github.com/test/test/pull/1",
+        clone_path = "/tmp/test",
+      })
+      state.set_files({ { filename = "test.lua" } })
+      state.set_comments("test.lua", {
+        { id = 1, path = "test.lua", line = 1, body = "First line" },
+      })
+
+      local file_comments = state.get_comments("test.lua")
+      assert.equals(1, file_comments[1].line)
+    end)
+
+    it("handles very large line numbers", function()
+      state.start({
+        owner = "test",
+        repo = "test",
+        number = 1,
+        url = "https://github.com/test/test/pull/1",
+        clone_path = "/tmp/test",
+      })
+      state.set_files({ { filename = "test.lua" } })
+      state.set_comments("test.lua", {
+        { id = 1, path = "test.lua", line = 99999, body = "Far down" },
+      })
+
+      local file_comments = state.get_comments("test.lua")
+      assert.equals(99999, file_comments[1].line)
+    end)
+  end)
+end)

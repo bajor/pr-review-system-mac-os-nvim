@@ -226,9 +226,12 @@ function M.get_current_sha(path, callback)
 end
 
 --- Check if a path is a git repository
----@param path string Path to check
+---@param path string|nil Path to check
 ---@return boolean
 function M.is_git_repo(path)
+  if not path or path == "" then
+    return false
+  end
   local git_dir = path .. "/.git"
   return vim.fn.isdirectory(git_dir) == 1
 end
@@ -260,7 +263,9 @@ end
 ---@param pr_number number PR number
 ---@return string
 function M.build_pr_path(clone_root, owner, repo, pr_number)
-  return string.format("%s/%s/%s/pr-%d", clone_root, owner, repo, pr_number)
+  -- Strip trailing slash from clone_root to prevent double slashes
+  local root = clone_root:gsub("/$", "")
+  return string.format("%s/%s/%s/pr-%d", root, owner, repo, pr_number)
 end
 
 --- Check how many commits the current branch is behind the base branch
