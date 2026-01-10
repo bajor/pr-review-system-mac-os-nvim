@@ -304,8 +304,18 @@ local function sync_pr(silent)
 
         state.set_files(files)
 
-        -- Clear comments for all files first
+        -- Preserve local state (resolved, pending) before clearing
+        local local_state = {}
         for _, file in ipairs(files) do
+          local file_comments = state.get_comments(file.filename)
+          for _, comment in ipairs(file_comments) do
+            if comment.id and (comment.resolved ~= nil or comment.pending) then
+              local_state[comment.id] = {
+                resolved = comment.resolved,
+                pending = comment.pending,
+              }
+            end
+          end
           state.set_comments(file.filename, {})
         end
 
@@ -314,6 +324,11 @@ local function sync_pr(silent)
           if not comments_err then
             for _, comment in ipairs(new_comments or {}) do
               if comment.path then
+                -- Restore local state if it exists
+                if comment.id and local_state[comment.id] then
+                  comment.resolved = local_state[comment.id].resolved
+                  comment.pending = local_state[comment.id].pending
+                end
                 local file_comments = state.get_comments(comment.path)
                 table.insert(file_comments, comment)
                 state.set_comments(comment.path, file_comments)
@@ -339,6 +354,11 @@ local function sync_pr(silent)
                     updated_at = comment.updated_at,
                     issue_comment = true,
                   }
+                  -- Restore local state if it exists
+                  if parsed_comment.id and local_state[parsed_comment.id] then
+                    parsed_comment.resolved = local_state[parsed_comment.id].resolved
+                    parsed_comment.pending = local_state[parsed_comment.id].pending
+                  end
                   local file_comments = state.get_comments(file_path)
                   table.insert(file_comments, parsed_comment)
                   state.set_comments(file_path, file_comments)
