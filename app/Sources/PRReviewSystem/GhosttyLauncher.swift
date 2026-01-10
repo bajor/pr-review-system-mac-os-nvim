@@ -159,8 +159,11 @@ public final class GhosttyLauncher {
 
     /// Open a PR in a new Ghostty tab using AppleScript
     private func openInNewTab(prURL: String, workingDirectory: String) async throws {
+        // Write URL to temp file to avoid long command line issues with terminal wrapping
+        try prURL.write(toFile: "/tmp/pr-review-url.txt", atomically: true, encoding: .utf8)
+
         let nvimPath = config.nvimPath
-        let shellCommand = "cd '\(workingDirectory)' && \(nvimPath) -c 'PRReview open \(prURL)'"
+        let shellCommand = "cd '\(workingDirectory)' && \(nvimPath) -c 'PRReview open'"
 
         // AppleScript to: activate Ghostty, send Cmd+T for new tab, type command, press Enter
         let script = """
@@ -208,14 +211,17 @@ public final class GhosttyLauncher {
             throw GhosttyLauncherError.ghosttyNotFound(path: ghosttyBinary)
         }
 
+        // Write URL to temp file to avoid long command line issues with terminal wrapping
+        try prURL.write(toFile: "/tmp/pr-review-url.txt", atomically: true, encoding: .utf8)
+
         // Build the shell command to execute inside Ghostty
         let nvimPath = config.nvimPath
         let shellCommand: String
         if let dir = workingDirectory {
             // cd to directory and run nvim with PRReview command
-            shellCommand = "cd '\(dir)' && \(nvimPath) -c 'PRReview open \(prURL)'"
+            shellCommand = "cd '\(dir)' && \(nvimPath) -c 'PRReview open'"
         } else {
-            shellCommand = "\(nvimPath) -c 'PRReview open \(prURL)'"
+            shellCommand = "\(nvimPath) -c 'PRReview open'"
         }
 
         // Launch Ghostty using Process

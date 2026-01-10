@@ -17,7 +17,16 @@ vim.api.nvim_create_user_command("PRReview", function(opts)
   if subcommand == "open" then
     -- Internal command used by macOS app to open PRs
     local url = args[2]
+    -- If no URL provided, read from temp file (written by macOS app to avoid long command line issues)
     if not url then
+      local f = io.open("/tmp/pr-review-url.txt", "r")
+      if f then
+        url = f:read("*a"):gsub("%s+$", "")
+        f:close()
+        os.remove("/tmp/pr-review-url.txt")
+      end
+    end
+    if not url or url == "" then
       vim.notify("Usage: :PRReview open <url>", vim.log.levels.WARN)
       return
     end
