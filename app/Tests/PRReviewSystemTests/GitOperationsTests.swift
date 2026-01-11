@@ -1,50 +1,45 @@
-import Testing
+import XCTest
 import Foundation
 @testable import PRReviewSystem
 
-@Suite("GitOperations Tests")
-struct GitOperationsTests {
+final class GitOperationsTests: XCTestCase {
 
-    @Test("Build PR path correctly")
-    func buildPRPath() {
+    func testBuildPRPath() {
         let path = GitOperations.buildPRPath(
             cloneRoot: "/home/user/repos",
             owner: "owner",
             repo: "repo",
             prNumber: 123
         )
-        #expect(path == "/home/user/repos/owner/repo/pr-123")
+        XCTAssertEqual(path, "/home/user/repos/owner/repo/pr-123")
     }
 
-    @Test("Build PR path with different values")
-    func buildPRPathVariant() {
+    func testBuildPRPathVariant() {
         let path = GitOperations.buildPRPath(
             cloneRoot: "/tmp/prs",
             owner: "org",
             repo: "project",
             prNumber: 1
         )
-        #expect(path == "/tmp/prs/org/project/pr-1")
+        XCTAssertEqual(path, "/tmp/prs/org/project/pr-1")
     }
 
-    @Test("Build PR path with large number")
-    func buildPRPathLargeNumber() {
+    func testBuildPRPathLargeNumber() {
         let path = GitOperations.buildPRPath(
             cloneRoot: "/data",
             owner: "company",
             repo: "app",
             prNumber: 99999
         )
-        #expect(path == "/data/company/app/pr-99999")
+        XCTAssertEqual(path, "/data/company/app/pr-99999")
     }
 
-    @Test("Is git repo returns true for git directory")
-    func isGitRepoTrue() {
+    func testIsGitRepoTrue() {
         // Find the repo root by looking for .git directory
         var path = FileManager.default.currentDirectoryPath
         while !path.isEmpty && path != "/" {
             if GitOperations.isGitRepo(at: path) {
-                #expect(GitOperations.isGitRepo(at: path) == true)
+                XCTAssertTrue(GitOperations.isGitRepo(at: path))
                 return
             }
             path = (path as NSString).deletingLastPathComponent
@@ -53,50 +48,43 @@ struct GitOperationsTests {
         // This can happen in sandboxed test environments
     }
 
-    @Test("Is git repo returns false for non-git directory")
-    func isGitRepoFalse() {
-        #expect(GitOperations.isGitRepo(at: "/tmp") == false)
+    func testIsGitRepoFalse() {
+        XCTAssertFalse(GitOperations.isGitRepo(at: "/tmp"))
     }
 
-    @Test("Is git repo returns false for non-existent directory")
-    func isGitRepoNonExistent() {
-        #expect(GitOperations.isGitRepo(at: "/nonexistent/path/12345") == false)
+    func testIsGitRepoNonExistent() {
+        XCTAssertFalse(GitOperations.isGitRepo(at: "/nonexistent/path/12345"))
     }
 }
 
-@Suite("GitError Tests")
-struct GitErrorTests {
+final class GitErrorTests: XCTestCase {
 
-    @Test("Error descriptions are meaningful")
-    func errorDescriptions() {
+    func testErrorDescriptions() {
         let errors: [GitError] = [
             .commandFailed(command: "git clone", exitCode: 1, message: "error"),
             .notARepository(path: "/tmp"),
         ]
 
         for error in errors {
-            #expect(!error.description.isEmpty)
+            XCTAssertFalse(error.description.isEmpty)
         }
     }
 
-    @Test("Command failed includes all info")
-    func commandFailedDescription() {
+    func testCommandFailedDescription() {
         let error = GitError.commandFailed(
             command: "git clone",
             exitCode: 128,
             message: "repository not found"
         )
-        #expect(error.description.contains("git clone"))
-        #expect(error.description.contains("128"))
-        #expect(error.description.contains("repository not found"))
+        XCTAssertTrue(error.description.contains("git clone"))
+        XCTAssertTrue(error.description.contains("128"))
+        XCTAssertTrue(error.description.contains("repository not found"))
     }
 }
 
-@Suite("GitOperations Integration Tests")
-struct GitOperationsIntegrationTests {
+final class GitOperationsIntegrationTests: XCTestCase {
 
-    @Test("Get current branch in repo")
-    func getCurrentBranch() async throws {
+    func testGetCurrentBranch() async throws {
         let cwd = FileManager.default.currentDirectoryPath
         // Only run if we're in a git repo
         guard GitOperations.isGitRepo(at: cwd) else {
@@ -104,11 +92,10 @@ struct GitOperationsIntegrationTests {
         }
 
         let branch = try await GitOperations.getCurrentBranch(at: cwd)
-        #expect(!branch.isEmpty)
+        XCTAssertFalse(branch.isEmpty)
     }
 
-    @Test("Get current SHA in repo")
-    func getCurrentSHA() async throws {
+    func testGetCurrentSHA() async throws {
         let cwd = FileManager.default.currentDirectoryPath
         // Only run if we're in a git repo
         guard GitOperations.isGitRepo(at: cwd) else {
@@ -116,8 +103,8 @@ struct GitOperationsIntegrationTests {
         }
 
         let sha = try await GitOperations.getCurrentSHA(at: cwd)
-        #expect(sha.count == 40)
+        XCTAssertEqual(sha.count, 40)
         // SHA should be hex
-        #expect(sha.allSatisfy { $0.isHexDigit })
+        XCTAssertTrue(sha.allSatisfy { $0.isHexDigit })
     }
 }

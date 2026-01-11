@@ -1,12 +1,10 @@
 import Foundation
-import Testing
+import XCTest
 @testable import PRReviewSystem
 
-@Suite("GhosttyLauncher Tests")
-struct GhosttyLauncherTests {
+final class GhosttyLauncherTests: XCTestCase {
 
-    @Test("Can be initialized from config")
-    func initFromConfig() {
+    func testInitFromConfig() {
         let config = Config(
             githubToken: "test",
             githubUsername: "user",
@@ -19,11 +17,10 @@ struct GhosttyLauncherTests {
             notifications: NotificationConfig()
         )
         let launcher = GhosttyLauncher(config: config)
-        #expect(type(of: launcher) == GhosttyLauncher.self)
+        XCTAssertTrue(type(of: launcher) == GhosttyLauncher.self)
     }
 
-    @Test("Can be initialized with multi-token config")
-    func initWithMultiTokenConfig() {
+    func testInitWithMultiTokenConfig() {
         let config = Config(
             githubToken: "default-token",
             githubUsername: "user",
@@ -36,50 +33,44 @@ struct GhosttyLauncherTests {
             notifications: NotificationConfig()
         )
         let launcher = GhosttyLauncher(config: config)
-        #expect(type(of: launcher) == GhosttyLauncher.self)
+        XCTAssertTrue(type(of: launcher) == GhosttyLauncher.self)
     }
 }
 
-@Suite("GhosttyLauncherError Tests")
-struct GhosttyLauncherErrorTests {
+final class GhosttyLauncherErrorTests: XCTestCase {
 
-    @Test("ghosttyNotFound error description")
-    func ghosttyNotFoundDescription() {
+    func testGhosttyNotFoundDescription() {
         let error = GhosttyLauncherError.ghosttyNotFound(path: "/test/path")
-        #expect(error.description.contains("/test/path"))
-        #expect(error.description.contains("not found"))
+        XCTAssertTrue(error.description.contains("/test/path"))
+        XCTAssertTrue(error.description.contains("not found"))
     }
 
-    @Test("launchFailed error description")
-    func launchFailedDescription() {
+    func testLaunchFailedDescription() {
         let error = GhosttyLauncherError.launchFailed(message: "test error")
-        #expect(error.description.contains("test error"))
-        #expect(error.description.contains("Failed"))
+        XCTAssertTrue(error.description.contains("test error"))
+        XCTAssertTrue(error.description.contains("Failed"))
     }
 
-    @Test("cloneFailed error description")
-    func cloneFailedDescription() {
+    func testCloneFailedDescription() {
         let error = GhosttyLauncherError.cloneFailed(message: "clone error")
-        #expect(error.description.contains("clone error"))
-        #expect(error.description.contains("clone"))
+        XCTAssertTrue(error.description.contains("clone error"))
+        XCTAssertTrue(error.description.contains("clone"))
     }
 
-    @Test("All error types conform to Error")
-    func allErrorsConformToError() {
+    func testAllErrorsConformToError() {
         let errors: [any Error] = [
             GhosttyLauncherError.ghosttyNotFound(path: "/path"),
             GhosttyLauncherError.launchFailed(message: "msg"),
             GhosttyLauncherError.cloneFailed(message: "msg"),
         ]
 
-        #expect(errors.count == 3)
+        XCTAssertEqual(errors.count, 3)
     }
 }
 
 // MARK: - GhosttyLauncher Configuration Tests
 
-@Suite("GhosttyLauncher Configuration Tests")
-struct GhosttyLauncherConfigTests {
+final class GhosttyLauncherConfigTests: XCTestCase {
 
     private func makeConfig(
         cloneRoot: String = "/tmp/test",
@@ -100,47 +91,41 @@ struct GhosttyLauncherConfigTests {
         )
     }
 
-    @Test("Config with .app path builds binary path correctly")
-    func configWithAppPath() {
+    func testConfigWithAppPath() {
         let config = makeConfig(ghosttyPath: "/Applications/Ghostty.app")
         let launcher = GhosttyLauncher(config: config)
         // Can't test internal binary path building directly, but config is valid
-        #expect(type(of: launcher) == GhosttyLauncher.self)
+        XCTAssertTrue(type(of: launcher) == GhosttyLauncher.self)
     }
 
-    @Test("Config with direct binary path")
-    func configWithBinaryPath() {
+    func testConfigWithBinaryPath() {
         let config = makeConfig(ghosttyPath: "/usr/local/bin/ghostty")
         let launcher = GhosttyLauncher(config: config)
-        #expect(type(of: launcher) == GhosttyLauncher.self)
+        XCTAssertTrue(type(of: launcher) == GhosttyLauncher.self)
     }
 
-    @Test("Config with tilde in clone root")
-    func configWithTildeCloneRoot() {
+    func testConfigWithTildeCloneRoot() {
         let config = makeConfig(cloneRoot: "~/pr-reviews")
         let launcher = GhosttyLauncher(config: config)
-        #expect(type(of: launcher) == GhosttyLauncher.self)
+        XCTAssertTrue(type(of: launcher) == GhosttyLauncher.self)
     }
 
-    @Test("Config with absolute clone root")
-    func configWithAbsoluteCloneRoot() {
+    func testConfigWithAbsoluteCloneRoot() {
         let config = makeConfig(cloneRoot: "/var/repos/pr-reviews")
         let launcher = GhosttyLauncher(config: config)
-        #expect(type(of: launcher) == GhosttyLauncher.self)
+        XCTAssertTrue(type(of: launcher) == GhosttyLauncher.self)
     }
 
-    @Test("Config with owner-specific tokens")
-    func configWithOwnerTokens() {
+    func testConfigWithOwnerTokens() {
         let config = makeConfig(tokens: [
             "org1": "token1",
             "org2": "token2",
         ])
         let launcher = GhosttyLauncher(config: config)
-        #expect(type(of: launcher) == GhosttyLauncher.self)
+        XCTAssertTrue(type(of: launcher) == GhosttyLauncher.self)
     }
 
-    @Test("Config uses correct token for owner")
-    func configResolvesTokenForOwner() {
+    func testConfigResolvesTokenForOwner() {
         let config = makeConfig(tokens: [
             "special-org": "special-token",
         ])
@@ -149,51 +134,46 @@ struct GhosttyLauncherConfigTests {
         let defaultToken = config.resolveToken(for: "random-owner")
         let specialToken = config.resolveToken(for: "special-org")
 
-        #expect(defaultToken == "default-token")
-        #expect(specialToken == "special-token")
+        XCTAssertEqual(defaultToken, "default-token")
+        XCTAssertEqual(specialToken, "special-token")
     }
 }
 
 // MARK: - GhosttyLauncher Path Tests
 
-@Suite("GhosttyLauncher Path Building Tests")
-struct GhosttyLauncherPathTests {
+final class GhosttyLauncherPathTests: XCTestCase {
 
-    @Test("PR path is built correctly")
-    func prPathBuilding() {
+    func testPrPathBuilding() {
         let path = GitOperations.buildPRPath(
             cloneRoot: "/tmp/test",
             owner: "myorg",
             repo: "myrepo",
             prNumber: 42
         )
-        #expect(path == "/tmp/test/myorg/myrepo/42")
+        XCTAssertEqual(path, "/tmp/test/myorg/myrepo/42")
     }
 
-    @Test("PR path handles special characters in repo name")
-    func prPathWithSpecialChars() {
+    func testPrPathWithSpecialChars() {
         let path = GitOperations.buildPRPath(
             cloneRoot: "/tmp/test",
             owner: "my-org",
             repo: "my_repo",
             prNumber: 123
         )
-        #expect(path == "/tmp/test/my-org/my_repo/123")
+        XCTAssertEqual(path, "/tmp/test/my-org/my_repo/123")
     }
 
-    @Test("PR path handles numbers in org/repo names")
-    func prPathWithNumbers() {
+    func testPrPathWithNumbers() {
         let path = GitOperations.buildPRPath(
             cloneRoot: "/tmp/test",
             owner: "org123",
             repo: "repo456",
             prNumber: 789
         )
-        #expect(path == "/tmp/test/org123/repo456/789")
+        XCTAssertEqual(path, "/tmp/test/org123/repo456/789")
     }
 
-    @Test("PR path handles trailing slash in clone root")
-    func prPathWithTrailingSlash() {
+    func testPrPathWithTrailingSlash() {
         let path = GitOperations.buildPRPath(
             cloneRoot: "/tmp/test/",
             owner: "owner",
@@ -201,14 +181,13 @@ struct GhosttyLauncherPathTests {
             prNumber: 1
         )
         // Path should not have double slashes
-        #expect(!path.contains("//"))
+        XCTAssertFalse(path.contains("//"))
     }
 }
 
 // MARK: - GhosttyLauncher Edge Case Tests
 
-@Suite("GhosttyLauncher Edge Case Tests")
-struct GhosttyLauncherEdgeCaseTests {
+final class GhosttyLauncherEdgeCaseTests: XCTestCase {
 
     private func makeConfig(
         cloneRoot: String = "/tmp/test",
@@ -228,35 +207,36 @@ struct GhosttyLauncherEdgeCaseTests {
         )
     }
 
-    @Test("Throws ghosttyNotFound for non-existent path")
-    func throwsGhosttyNotFound() async throws {
+    func testThrowsGhosttyNotFound() async throws {
         let config = makeConfig(ghosttyPath: "/nonexistent/path/Ghostty.app")
         let launcher = GhosttyLauncher(config: config)
 
         let pr = try makePullRequest(number: 1)
 
         // This should throw because Ghostty doesn't exist
-        await #expect(throws: GhosttyLauncherError.self) {
+        do {
             try await launcher.openPR(pr, owner: "owner", repo: "repo")
+            XCTFail("Expected GhosttyLauncherError to be thrown")
+        } catch is GhosttyLauncherError {
+            // Expected
+        } catch {
+            XCTFail("Expected GhosttyLauncherError, got \(type(of: error))")
         }
     }
 
-    @Test("Handles PR with unicode title")
-    func handlesUnicodeTitle() throws {
+    func testHandlesUnicodeTitle() throws {
         // Test that we can create PR with unicode
         let pr = try makePullRequest(number: 1, title: "Fix bug: 日本語テスト 🎉")
-        #expect(pr.title == "Fix bug: 日本語テスト 🎉")
+        XCTAssertEqual(pr.title, "Fix bug: 日本語テスト 🎉")
     }
 
-    @Test("Handles PR with very long branch name")
-    func handlesLongBranchName() throws {
+    func testHandlesLongBranchName() throws {
         let longBranch = String(repeating: "a", count: 200)
         let pr = try makePullRequest(number: 1, branch: longBranch)
-        #expect(pr.head.ref == longBranch)
+        XCTAssertEqual(pr.head.ref, longBranch)
     }
 
-    @Test("openAllPRs handles empty array")
-    func openAllPRsEmptyArray() async throws {
+    func testOpenAllPRsEmptyArray() async throws {
         let config = makeConfig()
         let launcher = GhosttyLauncher(config: config)
 

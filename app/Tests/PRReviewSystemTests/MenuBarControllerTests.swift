@@ -1,65 +1,55 @@
 import Foundation
-import Testing
+import XCTest
 @testable import PRReviewSystem
 
-@Suite("MenuBarController Tests")
-struct MenuBarControllerTests {
+final class MenuBarControllerTests: XCTestCase {
 
-    @Test("Shared instance exists")
-    func sharedInstanceExists() {
+    func testSharedInstanceExists() {
         let controller = MenuBarController.shared
         // If we got here, the shared instance exists
-        #expect(type(of: controller) == MenuBarController.self)
+        XCTAssertTrue(type(of: controller) == MenuBarController.self)
     }
 
-    @Test("Update badge with zero clears badge")
-    func updateBadgeZero() {
+    func testUpdateBadgeZero() {
         let controller = MenuBarController.shared
         controller.updateBadge(count: 0)
         // No crash means success
     }
 
-    @Test("Update badge with positive count")
-    func updateBadgePositive() {
+    func testUpdateBadgePositive() {
         let controller = MenuBarController.shared
         controller.updateBadge(count: 5)
         // No crash means success
     }
 
-    @Test("Rebuild menu doesn't crash")
-    func rebuildMenu() {
+    func testRebuildMenu() {
         let controller = MenuBarController.shared
         controller.rebuildMenu()
         // No crash means success
     }
 
-    @Test("Update pull requests with empty dict")
-    func updatePullRequestsEmpty() {
+    func testUpdatePullRequestsEmpty() {
         let controller = MenuBarController.shared
         controller.updatePullRequests([:])
         // No crash means success
     }
 
-    @Test("Clear pull requests")
-    func clearPullRequests() {
+    func testClearPullRequests() {
         let controller = MenuBarController.shared
         controller.clearPullRequests()
         // No crash means success
     }
 }
 
-@Suite("Notification Names Tests")
-struct NotificationNamesTests {
+final class NotificationNamesTests: XCTestCase {
 
-    @Test("prSelected notification name exists")
-    func prSelectedName() {
+    func testPrSelectedName() {
         let name = Notification.Name.prSelected
-        #expect(name.rawValue == "PRReviewSystem.prSelected")
+        XCTAssertEqual(name.rawValue, "PRReviewSystem.prSelected")
     }
 
-    @Test("refreshRequested notification name exists")
-    func refreshRequestedName() {
+    func testRefreshRequestedName() {
         let name = Notification.Name.refreshRequested
-        #expect(name.rawValue == "PRReviewSystem.refreshRequested")
+        XCTAssertEqual(name.rawValue, "PRReviewSystem.refreshRequested")
     }
 }

@@ -1,61 +1,55 @@
-import Testing
+import XCTest
 import Foundation
 @testable import PRReviewSystem
 
-@Suite("Config Tests")
-struct ConfigTests {
+final class ConfigTests: XCTestCase {
 
-    @Test("Defaults have all required fields")
-    func defaultsHaveAllFields() {
+    func testDefaultsHaveAllFields() {
         let defaults = Config.defaults
-        #expect(defaults.githubToken.isEmpty)
-        #expect(defaults.githubUsername.isEmpty)
-        #expect(defaults.repos.isEmpty)
-        #expect(!defaults.cloneRoot.isEmpty)
-        #expect(defaults.pollIntervalSeconds == 300)
-        #expect(!defaults.ghosttyPath.isEmpty)
-        #expect(!defaults.nvimPath.isEmpty)
+        XCTAssertTrue(defaults.githubToken.isEmpty)
+        XCTAssertTrue(defaults.githubUsername.isEmpty)
+        XCTAssertTrue(defaults.repos.isEmpty)
+        XCTAssertFalse(defaults.cloneRoot.isEmpty)
+        XCTAssertEqual(defaults.pollIntervalSeconds, 300)
+        XCTAssertFalse(defaults.ghosttyPath.isEmpty)
+        XCTAssertFalse(defaults.nvimPath.isEmpty)
     }
 
-    @Test("NotificationConfig defaults")
-    func notificationDefaults() {
+    func testNotificationDefaults() {
         let defaults = NotificationConfig.defaults
-        #expect(defaults.newCommits == true)
-        #expect(defaults.newComments == true)
-        #expect(defaults.sound == true)
+        XCTAssertTrue(defaults.newCommits)
+        XCTAssertTrue(defaults.newComments)
+        XCTAssertTrue(defaults.sound)
     }
 }
 
-@Suite("ConfigLoader Tests")
-struct ConfigLoaderTests {
+final class ConfigLoaderTests: XCTestCase {
 
-    @Test("Returns error when config file does not exist")
-    func fileNotFound() {
+    func testFileNotFound() {
         let path = "/nonexistent/path/config.json"
-        #expect(throws: ConfigError.fileNotFound(path: path)) {
-            try ConfigLoader.load(from: path)
+        XCTAssertThrowsError(try ConfigLoader.load(from: path)) { error in
+            guard case ConfigError.fileNotFound = error else {
+                XCTFail("Expected fileNotFound error")
+                return
+            }
         }
     }
 
-    @Test("Returns error for invalid JSON")
-    func invalidJSON() throws {
+    func testInvalidJSON() throws {
         let tmpFile = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString + ".json")
         try "{ invalid json }".write(to: tmpFile, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        #expect {
-            try ConfigLoader.load(from: tmpFile.path)
-        } throws: { error in
-            if case ConfigError.invalidJSON = error {
-                return true
+        XCTAssertThrowsError(try ConfigLoader.load(from: tmpFile.path)) { error in
+            guard case ConfigError.invalidJSON = error else {
+                XCTFail("Expected invalidJSON error")
+                return
             }
-            return false
         }
     }
 
-    @Test("Returns error when github_token is missing")
-    func missingGithubToken() throws {
+    func testMissingGithubToken() throws {
         let json = """
         {
             "github_username": "user",
@@ -67,13 +61,15 @@ struct ConfigLoaderTests {
         try json.write(to: tmpFile, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        #expect(throws: ConfigError.missingRequiredField(name: "github_token")) {
-            try ConfigLoader.load(from: tmpFile.path)
+        XCTAssertThrowsError(try ConfigLoader.load(from: tmpFile.path)) { error in
+            guard case ConfigError.missingRequiredField(name: "github_token") = error else {
+                XCTFail("Expected missingRequiredField error for github_token")
+                return
+            }
         }
     }
 
-    @Test("Returns error when github_username is missing")
-    func missingGithubUsername() throws {
+    func testMissingGithubUsername() throws {
         let json = """
         {
             "github_token": "ghp_xxx",
@@ -85,13 +81,15 @@ struct ConfigLoaderTests {
         try json.write(to: tmpFile, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        #expect(throws: ConfigError.missingRequiredField(name: "github_username")) {
-            try ConfigLoader.load(from: tmpFile.path)
+        XCTAssertThrowsError(try ConfigLoader.load(from: tmpFile.path)) { error in
+            guard case ConfigError.missingRequiredField(name: "github_username") = error else {
+                XCTFail("Expected missingRequiredField error for github_username")
+                return
+            }
         }
     }
 
-    @Test("Allows empty repos for auto-discovery")
-    func emptyReposAllowed() throws {
+    func testEmptyReposAllowed() throws {
         let json = """
         {
             "github_token": "ghp_xxx",
@@ -106,11 +104,10 @@ struct ConfigLoaderTests {
 
         // Empty repos is now valid - allows auto-discovery
         let config = try ConfigLoader.load(from: tmpFile.path)
-        #expect(config.repos.isEmpty)
+        XCTAssertTrue(config.repos.isEmpty)
     }
 
-    @Test("Returns error for invalid repo format")
-    func invalidRepoFormat() throws {
+    func testInvalidRepoFormat() throws {
         let json = """
         {
             "github_token": "ghp_xxx",
@@ -123,13 +120,15 @@ struct ConfigLoaderTests {
         try json.write(to: tmpFile, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
-        #expect(throws: ConfigError.invalidRepoFormat(repo: "invalid")) {
-            try ConfigLoader.load(from: tmpFile.path)
+        XCTAssertThrowsError(try ConfigLoader.load(from: tmpFile.path)) { error in
+            guard case ConfigError.invalidRepoFormat(repo: "invalid") = error else {
+                XCTFail("Expected invalidRepoFormat error")
+                return
+            }
         }
     }
 
-    @Test("Loads valid config successfully")
-    func loadValidConfig() throws {
+    func testLoadValidConfig() throws {
         let json = """
         {
             "github_token": "ghp_test123",
@@ -144,14 +143,13 @@ struct ConfigLoaderTests {
         defer { try? FileManager.default.removeItem(at: tmpFile) }
 
         let config = try ConfigLoader.load(from: tmpFile.path)
-        #expect(config.githubToken == "ghp_test123")
-        #expect(config.githubUsername == "testuser")
-        #expect(config.repos.count == 2)
-        #expect(config.cloneRoot == "/tmp/test/repos")
+        XCTAssertEqual(config.githubToken, "ghp_test123")
+        XCTAssertEqual(config.githubUsername, "testuser")
+        XCTAssertEqual(config.repos.count, 2)
+        XCTAssertEqual(config.cloneRoot, "/tmp/test/repos")
     }
 
-    @Test("Merges with defaults for missing optional fields")
-    func mergeWithDefaults() throws {
+    func testMergeWithDefaults() throws {
         let json = """
         {
             "github_token": "ghp_test123",
@@ -166,34 +164,30 @@ struct ConfigLoaderTests {
 
         let config = try ConfigLoader.load(from: tmpFile.path)
         // Should have default values
-        #expect(config.pollIntervalSeconds == 300)
-        #expect(config.ghosttyPath == "/Applications/Ghostty.app")
-        #expect(config.notifications.newCommits == true)
+        XCTAssertEqual(config.pollIntervalSeconds, 300)
+        XCTAssertEqual(config.ghosttyPath, "/Applications/Ghostty.app")
+        XCTAssertTrue(config.notifications.newCommits)
     }
 
-    @Test("Expands tilde in paths")
-    func expandsTildePaths() {
+    func testExpandsTildePaths() {
         let expanded = ConfigLoader.expandPath("~/test/path")
-        #expect(!expanded.hasPrefix("~"))
-        #expect(expanded.hasPrefix("/"))
+        XCTAssertFalse(expanded.hasPrefix("~"))
+        XCTAssertTrue(expanded.hasPrefix("/"))
     }
 
-    @Test("Validates repo format correctly")
-    func validatesRepoFormat() {
-        #expect(ConfigLoader.isValidRepoFormat("owner/repo") == true)
-        #expect(ConfigLoader.isValidRepoFormat("my-org/my-repo") == true)
-        #expect(ConfigLoader.isValidRepoFormat("org_name/repo.name") == true)
-        #expect(ConfigLoader.isValidRepoFormat("invalid") == false)
-        #expect(ConfigLoader.isValidRepoFormat("a/b/c") == false)
-        #expect(ConfigLoader.isValidRepoFormat("") == false)
+    func testValidatesRepoFormat() {
+        XCTAssertTrue(ConfigLoader.isValidRepoFormat("owner/repo"))
+        XCTAssertTrue(ConfigLoader.isValidRepoFormat("my-org/my-repo"))
+        XCTAssertTrue(ConfigLoader.isValidRepoFormat("org_name/repo.name"))
+        XCTAssertFalse(ConfigLoader.isValidRepoFormat("invalid"))
+        XCTAssertFalse(ConfigLoader.isValidRepoFormat("a/b/c"))
+        XCTAssertFalse(ConfigLoader.isValidRepoFormat(""))
     }
 }
 
-@Suite("ConfigError Tests")
-struct ConfigErrorTests {
+final class ConfigErrorTests: XCTestCase {
 
-    @Test("Error descriptions are meaningful")
-    func errorDescriptions() {
+    func testErrorDescriptions() {
         let errors: [ConfigError] = [
             .fileNotFound(path: "/test/path"),
             .invalidJSON(message: "test error"),
@@ -202,7 +196,7 @@ struct ConfigErrorTests {
         ]
 
         for error in errors {
-            #expect(!error.description.isEmpty)
+            XCTAssertFalse(error.description.isEmpty)
         }
     }
 }

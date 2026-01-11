@@ -1,9 +1,8 @@
 import Foundation
-import Testing
+import XCTest
 @testable import PRReviewSystem
 
-@Suite("PRPoller Tests")
-struct PRPollerTests {
+final class PRPollerTests: XCTestCase {
 
     /// Create a test config
     private func makeConfig() -> Config {
@@ -20,100 +19,89 @@ struct PRPollerTests {
         )
     }
 
-    @Test("Can be initialized")
-    func initialization() {
+    func testInitialization() {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
-        #expect(poller.isPolling == false)
+        XCTAssertFalse(poller.isPolling)
     }
 
-    @Test("isPolling is initially false")
-    func initialPollingState() {
+    func testInitialPollingState() {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
-        #expect(poller.isPolling == false)
+        XCTAssertFalse(poller.isPolling)
     }
 
-    @Test("clearState removes cached state")
-    func clearState() {
+    func testClearState() {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
         // This should not throw
         poller.clearState()
-        #expect(poller.isPolling == false)
+        XCTAssertFalse(poller.isPolling)
     }
 
-    @Test("stopPolling can be called when not polling")
-    func stopPollingWhenNotPolling() {
+    func testStopPollingWhenNotPolling() {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
         // Should not throw
         poller.stopPolling()
-        #expect(poller.isPolling == false)
+        XCTAssertFalse(poller.isPolling)
     }
 }
 
-@Suite("PRPoller.PRChange Tests")
-struct PRPollerPRChangeTests {
+final class PRPollerPRChangeTests: XCTestCase {
 
-    @Test("PRChange equality for newPR")
-    func prChangeNewPREquality() throws {
+    func testPrChangeNewPREquality() throws {
         let pr = try makePullRequest(number: 1)
         let change1 = PRPoller.PRChange(pr: pr, repo: "owner/repo", changeType: .newPR)
         let change2 = PRPoller.PRChange(pr: pr, repo: "owner/repo", changeType: .newPR)
 
-        #expect(change1 == change2)
+        XCTAssertEqual(change1, change2)
     }
 
-    @Test("PRChange equality for newCommits")
-    func prChangeNewCommitsEquality() throws {
+    func testPrChangeNewCommitsEquality() throws {
         let pr = try makePullRequest(number: 1)
         let change1 = PRPoller.PRChange(pr: pr, repo: "owner/repo", changeType: .newCommits(oldSHA: "abc", newSHA: "def"))
         let change2 = PRPoller.PRChange(pr: pr, repo: "owner/repo", changeType: .newCommits(oldSHA: "abc", newSHA: "def"))
 
-        #expect(change1 == change2)
+        XCTAssertEqual(change1, change2)
     }
 
-    @Test("PRChange inequality for different changeType")
-    func prChangeInequalityDifferentType() throws {
+    func testPrChangeInequalityDifferentType() throws {
         let pr = try makePullRequest(number: 1)
         let change1 = PRPoller.PRChange(pr: pr, repo: "owner/repo", changeType: .newPR)
         let change2 = PRPoller.PRChange(pr: pr, repo: "owner/repo", changeType: .newComments(count: 5))
 
-        #expect(change1 != change2)
+        XCTAssertNotEqual(change1, change2)
     }
 
-    @Test("PRChange inequality for different repo")
-    func prChangeInequalityDifferentRepo() throws {
+    func testPrChangeInequalityDifferentRepo() throws {
         let pr = try makePullRequest(number: 1)
         let change1 = PRPoller.PRChange(pr: pr, repo: "owner/repo1", changeType: .newPR)
         let change2 = PRPoller.PRChange(pr: pr, repo: "owner/repo2", changeType: .newPR)
 
-        #expect(change1 != change2)
+        XCTAssertNotEqual(change1, change2)
     }
 
-    @Test("ChangeType newComments stores count")
-    func changeTypeNewCommentsCount() {
+    func testChangeTypeNewCommentsCount() {
         let changeType = PRPoller.PRChange.ChangeType.newComments(count: 10)
         if case let .newComments(count) = changeType {
-            #expect(count == 10)
+            XCTAssertEqual(count, 10)
         } else {
-            Issue.record("Expected newComments")
+            XCTFail("Expected newComments")
         }
     }
 
-    @Test("ChangeType statusChanged stores from and to")
-    func changeTypeStatusChanged() {
+    func testChangeTypeStatusChanged() {
         let changeType = PRPoller.PRChange.ChangeType.statusChanged(from: "open", to: "merged")
         if case let .statusChanged(from, to) = changeType {
-            #expect(from == "open")
-            #expect(to == "merged")
+            XCTAssertEqual(from, "open")
+            XCTAssertEqual(to, "merged")
         } else {
-            Issue.record("Expected statusChanged")
+            XCTFail("Expected statusChanged")
         }
     }
 
@@ -153,8 +141,7 @@ struct PRPollerPRChangeTests {
 
 // MARK: - PRPoller Behavior Tests
 
-@Suite("PRPoller Behavior Tests")
-struct PRPollerBehaviorTests {
+final class PRPollerBehaviorTests: XCTestCase {
 
     /// Create a test config
     private func makeConfig(
@@ -175,41 +162,7 @@ struct PRPollerBehaviorTests {
         )
     }
 
-    /// Helper to create a test PullRequest by decoding JSON
-    private func makePullRequest(number: Int, user: String = "otheruser", sha: String = "abc123") throws -> PullRequest {
-        let json = """
-        {
-            "id": \(number),
-            "number": \(number),
-            "title": "Test PR #\(number)",
-            "body": "Test body",
-            "state": "open",
-            "html_url": "https://github.com/owner/repo/pull/\(number)",
-            "user": {
-                "id": 1,
-                "login": "\(user)",
-                "avatar_url": "https://example.com/avatar.png"
-            },
-            "head": {
-                "ref": "feature-branch",
-                "sha": "\(sha)"
-            },
-            "base": {
-                "ref": "main",
-                "sha": "def456"
-            },
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z"
-        }
-        """
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(PullRequest.self, from: json.data(using: .utf8)!)
-    }
-
-    @Test("startPolling sets isPolling to true")
-    func startPollingSetsIsPolling() async throws {
+    func testStartPollingSetsIsPolling() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -224,13 +177,12 @@ struct PRPollerBehaviorTests {
         // Give time for async to kick in
         try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(poller.isPolling == true)
+        XCTAssertTrue(poller.isPolling)
 
         poller.stopPolling()
     }
 
-    @Test("stopPolling sets isPolling to false")
-    func stopPollingSetsIsPollingFalse() async throws {
+    func testStopPollingSetsIsPollingFalse() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -242,18 +194,17 @@ struct PRPollerBehaviorTests {
         poller.startPolling { _ in }
         try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(poller.isPolling == true)
+        XCTAssertTrue(poller.isPolling)
 
         poller.stopPolling()
 
         // Give time for stop to process
         try await Task.sleep(nanoseconds: 100_000_000)
 
-        #expect(poller.isPolling == false)
+        XCTAssertFalse(poller.isPolling)
     }
 
-    @Test("startPolling ignores duplicate start calls")
-    func startPollingIgnoresDuplicates() async throws {
+    func testStartPollingIgnoresDuplicates() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -272,13 +223,12 @@ struct PRPollerBehaviorTests {
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should only poll once on start
-        #expect(callCount == 1)
+        XCTAssertEqual(callCount, 1)
 
         poller.stopPolling()
     }
 
-    @Test("pollNow triggers immediate poll")
-    func pollNowTriggersImmediatePoll() async throws {
+    func testPollNowTriggersImmediatePoll() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -293,11 +243,10 @@ struct PRPollerBehaviorTests {
         await poller.pollNow()
         await poller.pollNow()
 
-        #expect(callCount == 2)
+        XCTAssertEqual(callCount, 2)
     }
 
-    @Test("Poll detects new PRs")
-    func pollDetectsNewPRs() async throws {
+    func testPollDetectsNewPRs() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -329,21 +278,20 @@ struct PRPollerBehaviorTests {
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
-        #expect(detectedChanges.count == 1)
+        XCTAssertEqual(detectedChanges.count, 1)
         if let change = detectedChanges.first {
-            #expect(change.pr.number == 42)
+            XCTAssertEqual(change.pr.number, 42)
             if case .newPR = change.changeType {
                 // Expected
             } else {
-                Issue.record("Expected newPR change type")
+                XCTFail("Expected newPR change type")
             }
         }
 
         poller.stopPolling()
     }
 
-    @Test("Poll detects new commits")
-    func pollDetectsNewCommits() async throws {
+    func testPollDetectsNewCommits() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -384,16 +332,16 @@ struct PRPollerBehaviorTests {
         try await Task.sleep(nanoseconds: 100_000_000)
 
         // First poll should detect newPR, second should detect newCommits
-        #expect(allChanges.count >= 2)
+        XCTAssertGreaterThanOrEqual(allChanges.count, 2)
         if allChanges.count >= 2 {
             // Second poll should show new commits
             let secondPollChanges = allChanges[1]
             if let change = secondPollChanges.first {
                 if case let .newCommits(oldSHA, newSHA) = change.changeType {
-                    #expect(oldSHA == "abc123")
-                    #expect(newSHA == "xyz789")
+                    XCTAssertEqual(oldSHA, "abc123")
+                    XCTAssertEqual(newSHA, "xyz789")
                 } else {
-                    Issue.record("Expected newCommits change type")
+                    XCTFail("Expected newCommits change type")
                 }
             }
         }
@@ -401,8 +349,7 @@ struct PRPollerBehaviorTests {
         poller.stopPolling()
     }
 
-    @Test("Poll filters out own PRs")
-    func pollFiltersOwnPRs() async throws {
+    func testPollFiltersOwnPRs() async throws {
         let config = makeConfig(username: "myuser")
         let poller = PRPoller(config: config)
 
@@ -436,13 +383,12 @@ struct PRPollerBehaviorTests {
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should be empty because PR author matches username
-        #expect(detectedChanges.isEmpty)
+        XCTAssertTrue(detectedChanges.isEmpty)
 
         poller.stopPolling()
     }
 
-    @Test("clearState resets detected changes tracking")
-    func clearStateResetsTracking() async throws {
+    func testClearStateResetsTracking() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -475,7 +421,7 @@ struct PRPollerBehaviorTests {
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should have detected 1 new PR
-        #expect(changeCount == 1)
+        XCTAssertEqual(changeCount, 1)
 
         // Clear state
         poller.clearState()
@@ -485,13 +431,12 @@ struct PRPollerBehaviorTests {
         try await Task.sleep(nanoseconds: 100_000_000)
 
         // Should have detected it again after clear
-        #expect(changeCount == 2)
+        XCTAssertEqual(changeCount, 2)
 
         poller.stopPolling()
     }
 
-    @Test("Poll continues with other repos on API error")
-    func pollContinuesOnError() async throws {
+    func testPollContinuesOnError() async throws {
         let config = makeConfig(repos: ["owner/repo1", "owner/repo2"])
         let poller = PRPoller(config: config)
 
@@ -529,16 +474,15 @@ struct PRPollerBehaviorTests {
         try await Task.sleep(nanoseconds: 300_000_000)
 
         // Should still detect PR from repo2 despite repo1 error
-        #expect(detectedChanges.count == 1)
+        XCTAssertEqual(detectedChanges.count, 1)
         if let change = detectedChanges.first {
-            #expect(change.repo == "owner/repo2")
+            XCTAssertEqual(change.repo, "owner/repo2")
         }
 
         poller.stopPolling()
     }
 
-    @Test("Poll handles empty repos config")
-    func pollHandlesEmptyReposConfig() async throws {
+    func testPollHandlesEmptyReposConfig() async throws {
         // When repos is empty, poller should try to discover repos
         // But since we're mocking, it won't find any
         let config = makeConfig(repos: [])
@@ -561,7 +505,7 @@ struct PRPollerBehaviorTests {
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should handle gracefully with no changes
-        #expect(detectedChanges.isEmpty)
+        XCTAssertTrue(detectedChanges.isEmpty)
 
         poller.stopPolling()
     }
@@ -569,8 +513,7 @@ struct PRPollerBehaviorTests {
 
 // MARK: - PRPoller Edge Case Tests
 
-@Suite("PRPoller Edge Case Tests")
-struct PRPollerEdgeCaseTests {
+final class PRPollerEdgeCaseTests: XCTestCase {
 
     private func makeConfig(repos: [String] = ["owner/repo"]) -> Config {
         Config(
@@ -586,8 +529,7 @@ struct PRPollerEdgeCaseTests {
         )
     }
 
-    @Test("Handles rapid start/stop cycles")
-    func rapidStartStopCycles() async throws {
+    func testRapidStartStopCycles() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -605,11 +547,10 @@ struct PRPollerEdgeCaseTests {
         try await Task.sleep(nanoseconds: 100_000_000)
 
         // Should end up not polling
-        #expect(poller.isPolling == false)
+        XCTAssertFalse(poller.isPolling)
     }
 
-    @Test("Handles network timeout during poll")
-    func handlesNetworkTimeout() async throws {
+    func testHandlesNetworkTimeout() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -618,21 +559,17 @@ struct PRPollerEdgeCaseTests {
             throw MockURLProtocol.networkError(code: NSURLErrorTimedOut)
         }
 
-        var callbackCalled = false
-        poller.startPolling { changes in
-            callbackCalled = changes.isEmpty
-        }
+        poller.startPolling { _ in }
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should not crash, callback may or may not be called with empty
-        #expect(poller.isPolling == true)
+        XCTAssertTrue(poller.isPolling)
 
         poller.stopPolling()
     }
 
-    @Test("Handles malformed JSON response")
-    func handlesMalformedJSON() async throws {
+    func testHandlesMalformedJSON() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -649,14 +586,13 @@ struct PRPollerEdgeCaseTests {
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should handle gracefully with no changes
-        #expect(detectedChanges.isEmpty)
-        #expect(poller.isPolling == true)
+        XCTAssertTrue(detectedChanges.isEmpty)
+        XCTAssertTrue(poller.isPolling)
 
         poller.stopPolling()
     }
 
-    @Test("Handles PR with very long title")
-    func handlesPRWithLongTitle() async throws {
+    func testHandlesPRWithLongTitle() async throws {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
@@ -689,8 +625,8 @@ struct PRPollerEdgeCaseTests {
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
-        #expect(detectedChanges.count == 1)
-        #expect(detectedChanges.first?.pr.title == longTitle)
+        XCTAssertEqual(detectedChanges.count, 1)
+        XCTAssertEqual(detectedChanges.first?.pr.title, longTitle)
 
         poller.stopPolling()
     }

@@ -1,22 +1,19 @@
-import Testing
+import XCTest
 @testable import PRReviewSystem
 
-@Suite("PRReviewSystem Tests")
-struct PRReviewSystemTests {
+final class PRReviewSystemTests: XCTestCase {
 
-    @Test("Version is not empty")
-    func versionIsNotEmpty() {
+    func testVersionIsNotEmpty() {
         let version = getVersion()
-        #expect(!version.isEmpty, "Version should not be empty")
+        XCTAssertFalse(version.isEmpty, "Version should not be empty")
     }
 
-    @Test("Version matches semver format")
-    func versionFormat() {
+    func testVersionFormat() {
         let version = getVersion()
         // Version should match semver format: X.Y.Z
         let pattern = #"^\d+\.\d+\.\d+$"#
         let regex = try? Regex(pattern)
         let match = version.wholeMatch(of: regex!)
-        #expect(match != nil, "Version '\(version)' should match semver format X.Y.Z")
+        XCTAssertNotNil(match, "Version '\(version)' should match semver format X.Y.Z")
     }
 }
