@@ -164,10 +164,10 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testStartPollingSetsIsPolling() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
+        MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
 
         // Need to handle the fact that startPolling triggers an immediate poll
-        MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             MockURLProtocol.successResponse(for: request, jsonString: "[]")
         }
@@ -184,9 +184,9 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testStopPollingSetsIsPollingFalse() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
-
         MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
+
         MockURLProtocol.requestHandler = { request in
             MockURLProtocol.successResponse(for: request, jsonString: "[]")
         }
@@ -206,11 +206,11 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testStartPollingIgnoresDuplicates() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
+        MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
 
         let callCount = SendableBox(0)
 
-        MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             callCount.value += 1
             return MockURLProtocol.successResponse(for: request, jsonString: "[]")
@@ -230,11 +230,11 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testPollNowTriggersImmediatePoll() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
+        MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
 
         let callCount = SendableBox(0)
 
-        MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             callCount.value += 1
             return MockURLProtocol.successResponse(for: request, jsonString: "[]")
@@ -248,7 +248,8 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testPollDetectsNewPRs() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
+        MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
 
         let prJson = """
         [{
@@ -266,7 +267,6 @@ final class PRPollerBehaviorTests: XCTestCase {
         }]
         """
 
-        MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }
@@ -293,10 +293,10 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testPollDetectsNewCommits() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
+        MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
 
         let pollCount = SendableBox(0)
-        MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             pollCount.value += 1
             let sha = pollCount.value == 1 ? "abc123" : "xyz789" // Different SHA on second poll
@@ -351,7 +351,8 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testPollFiltersOwnPRs() async throws {
         let config = makeConfig(username: "myuser")
-        let poller = PRPoller(config: config)
+        MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
 
         // PR is authored by "myuser", which matches config username
         let prJson = """
@@ -370,7 +371,6 @@ final class PRPollerBehaviorTests: XCTestCase {
         }]
         """
 
-        MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }
@@ -390,7 +390,8 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testClearStateResetsTracking() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
+        MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
 
         let prJson = """
         [{
@@ -408,7 +409,6 @@ final class PRPollerBehaviorTests: XCTestCase {
         }]
         """
 
-        MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }
@@ -438,9 +438,8 @@ final class PRPollerBehaviorTests: XCTestCase {
 
     func testPollContinuesOnError() async throws {
         let config = makeConfig(repos: ["owner/repo1", "owner/repo2"])
-        let poller = PRPoller(config: config)
-
         MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
         MockURLProtocol.requestHandler = { request in
             if request.url?.path.contains("repo1") == true {
                 // First repo fails
@@ -486,9 +485,8 @@ final class PRPollerBehaviorTests: XCTestCase {
         // When repos is empty, poller should try to discover repos
         // But since we're mocking, it won't find any
         let config = makeConfig(repos: [])
-        let poller = PRPoller(config: config)
-
         MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
         MockURLProtocol.requestHandler = { request in
             // Return empty repos for discovery
             if request.url?.path.contains("/user/repos") == true {
@@ -531,9 +529,9 @@ final class PRPollerEdgeCaseTests: XCTestCase {
 
     func testRapidStartStopCycles() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
-
         MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
+
         MockURLProtocol.requestHandler = { request in
             MockURLProtocol.successResponse(for: request, jsonString: "[]")
         }
@@ -552,9 +550,9 @@ final class PRPollerEdgeCaseTests: XCTestCase {
 
     func testHandlesNetworkTimeout() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
-
         MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
+
         MockURLProtocol.requestHandler = { _ in
             throw MockURLProtocol.networkError(code: NSURLErrorTimedOut)
         }
@@ -571,9 +569,9 @@ final class PRPollerEdgeCaseTests: XCTestCase {
 
     func testHandlesMalformedJSON() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
-
         MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
+
         MockURLProtocol.requestHandler = { request in
             MockURLProtocol.successResponse(for: request, jsonString: "{ not valid json }")
         }
@@ -594,7 +592,8 @@ final class PRPollerEdgeCaseTests: XCTestCase {
 
     func testHandlesPRWithLongTitle() async throws {
         let config = makeConfig()
-        let poller = PRPoller(config: config)
+        MockURLProtocol.reset()
+        let poller = PRPoller(config: config, session: MockURLProtocol.mockSession())
 
         let longTitle = String(repeating: "A", count: 1000)
         let prJson = """
@@ -613,7 +612,6 @@ final class PRPollerEdgeCaseTests: XCTestCase {
         }]
         """
 
-        MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
             MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }

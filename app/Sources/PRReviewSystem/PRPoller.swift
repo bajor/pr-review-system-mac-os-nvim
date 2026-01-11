@@ -26,6 +26,9 @@ public final class PRPoller: @unchecked Sendable {
     /// Configuration (used for repo list and token resolution)
     private let config: Config
 
+    /// URLSession for network requests (injectable for testing)
+    private let session: URLSession?
+
     /// Polling timer
     private var timer: Timer?
 
@@ -49,8 +52,9 @@ public final class PRPoller: @unchecked Sendable {
 
     // MARK: - Initialization
 
-    public init(config: Config) {
+    public init(config: Config, session: URLSession? = nil) {
         self.config = config
+        self.session = session
     }
 
     // MARK: - Private Helpers
@@ -60,7 +64,7 @@ public final class PRPoller: @unchecked Sendable {
     private func api(for owner: String) -> GitHubAPI? {
         let token = config.resolveToken(for: owner)
         guard !token.isEmpty else { return nil }
-        return GitHubAPI(token: token)
+        return GitHubAPI(token: token, session: session)
     }
 
     /// Discover all repos accessible by configured tokens
@@ -72,8 +76,9 @@ public final class PRPoller: @unchecked Sendable {
             // Discover repos from each token in the tokens map
             for (_, token) in config.tokens {
                 let capturedToken = token
+                let capturedSession = session
                 group.addTask {
-                    let api = GitHubAPI(token: capturedToken)
+                    let api = GitHubAPI(token: capturedToken, session: capturedSession)
                     do {
                         let repos = try await api.listRepos()
                         return repos.map { (repo: $0.fullName, token: capturedToken) }
@@ -89,8 +94,9 @@ public final class PRPoller: @unchecked Sendable {
                 let tokenAlreadyUsed = config.tokens.values.contains(config.githubToken)
                 if !tokenAlreadyUsed {
                     let defaultToken = config.githubToken
+                    let capturedSession = session
                     group.addTask {
-                        let api = GitHubAPI(token: defaultToken)
+                        let api = GitHubAPI(token: defaultToken, session: capturedSession)
                         do {
                             let repos = try await api.listRepos()
                             return repos.map { (repo: $0.fullName, token: defaultToken) }
@@ -225,7 +231,7 @@ public final class PRPoller: @unchecked Sendable {
             let repoName = String(parts[1])
 
             // Use the token associated with this repo
-            let repoAPI = GitHubAPI(token: token)
+            let repoAPI = GitHubAPI(token: token, session: session)
 
             do {
                 let prs = try await repoAPI.listPRs(owner: owner, repo: repoName)
