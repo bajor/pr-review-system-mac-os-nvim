@@ -1,21 +1,18 @@
 import Foundation
-import Testing
+import XCTest
 @testable import PRReviewSystem
 
-@Suite("CleanupService Tests")
-struct CleanupServiceTests {
+final class CleanupServiceTests: XCTestCase {
 
     /// Test directory for cleanup tests
     private let testRoot = "/tmp/claude/pr-review-cleanup-tests"
 
-    @Test("Can be initialized with clone root")
-    func initWithCloneRoot() {
+    func testInitWithCloneRoot() {
         let service = CleanupService(cloneRoot: "/tmp/test", maxAgeDays: 30)
-        #expect(service != nil)
+        XCTAssertNotNil(service)
     }
 
-    @Test("Can be initialized from config")
-    func initFromConfig() {
+    func testInitFromConfig() {
         let config = Config(
             githubToken: "test",
             githubUsername: "user",
@@ -28,94 +25,82 @@ struct CleanupServiceTests {
             notifications: NotificationConfig()
         )
         let service = CleanupService(config: config)
-        #expect(service != nil)
+        XCTAssertNotNil(service)
     }
 
-    @Test("shouldRunCleanup returns true initially")
-    func shouldRunCleanupInitially() throws {
+    func testShouldRunCleanupInitially() throws {
         // Use a completely unique parent directory to avoid shared state
         let uniqueParent = testRoot + "/fresh1-\(UUID().uuidString)"
         let uniqueRoot = uniqueParent + "/repos"
         // Remove any existing state file
         try? FileManager.default.removeItem(atPath: uniqueParent + "/state.json")
         let service = CleanupService(cloneRoot: uniqueRoot, maxAgeDays: 30)
-        #expect(service.shouldRunCleanup() == true)
+        XCTAssertTrue(service.shouldRunCleanup())
     }
 
-    @Test("lastCleanupDate returns nil initially")
-    func lastCleanupDateInitially() throws {
+    func testLastCleanupDateInitially() throws {
         // Use a completely unique parent directory to avoid shared state
         let uniqueParent = testRoot + "/fresh2-\(UUID().uuidString)"
         let uniqueRoot = uniqueParent + "/repos"
         // Remove any existing state file
         try? FileManager.default.removeItem(atPath: uniqueParent + "/state.json")
         let service = CleanupService(cloneRoot: uniqueRoot, maxAgeDays: 30)
-        #expect(service.lastCleanupDate() == nil)
+        XCTAssertNil(service.lastCleanupDate())
     }
 
-    @Test("previewCleanup returns empty for non-existent directory")
-    func previewCleanupNonExistent() {
+    func testPreviewCleanupNonExistent() {
         let service = CleanupService(cloneRoot: testRoot + "/nonexistent", maxAgeDays: 30)
         let result = service.previewCleanup()
-        #expect(result.isEmpty)
+        XCTAssertTrue(result.isEmpty)
     }
 
-    @Test("runCleanup returns zero count for non-existent directory")
-    func runCleanupNonExistent() {
+    func testRunCleanupNonExistent() {
         let service = CleanupService(cloneRoot: testRoot + "/nonexistent2", maxAgeDays: 30)
         let result = service.runCleanup()
-        #expect(result.deletedCount == 0)
-        #expect(result.freedBytes == 0)
-        #expect(result.errors.isEmpty)
+        XCTAssertEqual(result.deletedCount, 0)
+        XCTAssertEqual(result.freedBytes, 0)
+        XCTAssertTrue(result.errors.isEmpty)
     }
 
-    @Test("runCleanup updates lastCleanupDate")
-    func runCleanupUpdatesDate() {
+    func testRunCleanupUpdatesDate() {
         let service = CleanupService(cloneRoot: testRoot + "/test3", maxAgeDays: 30)
         _ = service.runCleanup()
-        #expect(service.lastCleanupDate() != nil)
+        XCTAssertNotNil(service.lastCleanupDate())
     }
 
-    @Test("shouldRunCleanup returns false after recent cleanup")
-    func shouldRunCleanupAfterRecentCleanup() {
+    func testShouldRunCleanupAfterRecentCleanup() {
         let service = CleanupService(cloneRoot: testRoot + "/test4", maxAgeDays: 30)
         _ = service.runCleanup()
-        #expect(service.shouldRunCleanup() == false)
+        XCTAssertFalse(service.shouldRunCleanup())
     }
 }
 
-@Suite("CleanupResult Tests")
-struct CleanupResultTests {
+final class CleanupResultTests: XCTestCase {
 
-    @Test("CleanupResult equality")
-    func resultEquality() {
+    func testResultEquality() {
         let result1 = CleanupService.CleanupResult(deletedCount: 5, freedBytes: 1000, errors: [])
         let result2 = CleanupService.CleanupResult(deletedCount: 5, freedBytes: 1000, errors: [])
-        #expect(result1 == result2)
+        XCTAssertEqual(result1, result2)
     }
 
-    @Test("CleanupResult inequality for different count")
-    func resultInequalityCount() {
+    func testResultInequalityCount() {
         let result1 = CleanupService.CleanupResult(deletedCount: 5, freedBytes: 1000, errors: [])
         let result2 = CleanupService.CleanupResult(deletedCount: 3, freedBytes: 1000, errors: [])
-        #expect(result1 != result2)
+        XCTAssertNotEqual(result1, result2)
     }
 
-    @Test("CleanupResult freedMB calculation")
-    func freedMBCalculation() {
+    func testFreedMBCalculation() {
         let result = CleanupService.CleanupResult(deletedCount: 1, freedBytes: 1024 * 1024, errors: [])
-        #expect(result.freedMB == 1.0)
+        XCTAssertEqual(result.freedMB, 1.0)
     }
 
-    @Test("CleanupResult freedMB for partial MB")
-    func freedMBPartial() {
+    func testFreedMBPartial() {
         let result = CleanupService.CleanupResult(deletedCount: 1, freedBytes: 512 * 1024, errors: [])
-        #expect(result.freedMB == 0.5)
+        XCTAssertEqual(result.freedMB, 0.5)
     }
 
-    @Test("CleanupResult freedMB for zero bytes")
-    func freedMBZero() {
+    func testFreedMBZero() {
         let result = CleanupService.CleanupResult(deletedCount: 0, freedBytes: 0, errors: [])
-        #expect(result.freedMB == 0.0)
+        XCTAssertEqual(result.freedMB, 0.0)
     }
 }
