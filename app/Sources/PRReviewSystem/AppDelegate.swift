@@ -200,8 +200,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupNotificationManager() {
         notificationManager.onOpenPR = { [weak self] prURL in
+            let capturedSelf = self
             Task {
-                await self?.openPRByURL(prURL)
+                await capturedSelf?.openPRByURL(prURL)
             }
         }
     }
@@ -218,8 +219,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startAutoRefresh() {
         // Refresh PR list every 15 minutes to detect closed/changed PRs
         autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: autoRefreshInterval, repeats: true) { [weak self] _ in
+            let capturedSelf = self
             Task {
-                await self?.refreshPullRequests()
+                await capturedSelf?.refreshPullRequests()
             }
         }
     }
@@ -529,8 +531,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Start polling timer
         checkStatusTimer = Timer.scheduledTimer(withTimeInterval: checkStatusPollInterval, repeats: true) { [weak self] _ in
+            let capturedSelf = self
             Task { @MainActor in
-                await self?.pollPendingCheckStatuses()
+                await capturedSelf?.pollPendingCheckStatuses()
             }
         }
     }
