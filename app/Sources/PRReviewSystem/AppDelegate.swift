@@ -361,17 +361,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Pull Request and Issue Fetching
 
     private func refreshPullRequests() async {
-        guard let config = config else {
-            return
+        guard let config = config else { return }
+
+        let reposWithTokens = await getReposToFetch(config: config)
+        repoTokenMap = Dictionary(uniqueKeysWithValues: reposWithTokens.map { ($0.repo, $0.token) })
+
+        let (allPRs, allIssues) = await fetchPRsAndIssues(reposWithTokens: reposWithTokens)
+
+        await MainActor.run {
+            menuBarController.updatePullRequests(allPRs)
+            menuBarController.updateIssues(allIssues)
         }
 
-        // Determine which repos to check with their tokens
-        // For explicit config.repos, resolve token via api(for:)
-        // For auto-discovered repos, use the token that discovered them
-        let reposWithTokens: [(repo: String, token: String)]
+        fetchCommitAndCheckInfo(allPRs: allPRs)
+
+        await MainActor.run {
+            startCheckStatusPollingIfNeeded()
+        }
+    }
+
+    /// Determine which repos to fetch with their tokens
+    private func getReposToFetch(config: Config) async -> [(repo: String, token: String)] {
         if !config.repos.isEmpty {
-            // Use explicit repos from config, resolve tokens
-            reposWithTokens = config.repos.compactMap { repo -> (repo: String, token: String)? in
+            return config.repos.compactMap { repo -> (repo: String, token: String)? in
                 let parts = repo.split(separator: "/")
                 guard parts.count == 2 else { return nil }
                 let owner = String(parts[0])
@@ -380,120 +392,108 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 return (repo: repo, token: token)
             }
         } else if let cached = cachedRepos {
-            reposWithTokens = cached
+            return cached
         } else {
             let discovered = await discoverRepos()
             cachedRepos = discovered
             print("Auto-discovered \(discovered.count) repos")
-            reposWithTokens = discovered
+            return discovered
         }
+    }
 
-        // Build repo -> token mapping for later use (commit/check fetching)
-        repoTokenMap = Dictionary(uniqueKeysWithValues: reposWithTokens.map { ($0.repo, $0.token) })
-
-        // Fetch all PRs and issues in parallel
-        let (allPRs, allIssues) = await withTaskGroup(of: (prs: (String, [PRDisplayInfo])?, issues: (String, [IssueDisplayInfo])?)?.self) { group in
+    /// Fetch PRs and issues for all repos in parallel
+    private func fetchPRsAndIssues(
+        reposWithTokens: [(repo: String, token: String)]
+    ) async -> ([String: [PRDisplayInfo]], [String: [IssueDisplayInfo]]) {
+        await withTaskGroup(
+            of: (prs: (String, [PRDisplayInfo])?, issues: (String, [IssueDisplayInfo])?)?.self
+        ) { group in
             for (repo, token) in reposWithTokens {
-                let capturedToken = token
-                group.addTask {
-                    // Parse owner/repo from the repo string
-                    let parts = repo.split(separator: "/")
-                    guard parts.count == 2 else { return nil }
-                    let owner = String(parts[0])
-                    let repoName = String(parts[1])
-
-                    // Use the token associated with this repo
-                    let api = GitHubAPI(token: capturedToken)
-
-                    // Fetch PRs
-                    var prResult: (String, [PRDisplayInfo])? = nil
-                    do {
-                        let prs = try await api.listPRs(owner: owner, repo: repoName)
-                        if !prs.isEmpty {
-                            let prInfos = prs.map { PRDisplayInfo(pr: $0) }
-                            prResult = (repo, prInfos)
-                        }
-                    } catch {
-                        print("Error fetching PRs for \(repo): \(error)")
-                    }
-
-                    // Fetch Issues
-                    var issueResult: (String, [IssueDisplayInfo])? = nil
-                    do {
-                        let issues = try await api.listIssues(owner: owner, repo: repoName)
-                        if !issues.isEmpty {
-                            let issueInfos = issues.map { IssueDisplayInfo(issue: $0) }
-                            issueResult = (repo, issueInfos)
-                        }
-                    } catch {
-                        print("Error fetching issues for \(repo): \(error)")
-                    }
-
-                    return (prs: prResult, issues: issueResult)
-                }
+                group.addTask { await self.fetchRepoData(repo: repo, token: token) }
             }
 
-            // Collect results
             var prResults: [String: [PRDisplayInfo]] = [:]
             var issueResults: [String: [IssueDisplayInfo]] = [:]
             for await result in group {
-                if let r = result {
-                    if let (repo, prInfos) = r.prs {
-                        prResults[repo] = prInfos
-                    }
-                    if let (repo, issueInfos) = r.issues {
-                        issueResults[repo] = issueInfos
-                    }
+                guard let result = result else { continue }
+                if let (repo, prInfos) = result.prs {
+                    prResults[repo] = prInfos
+                }
+                if let (repo, issueInfos) = result.issues {
+                    issueResults[repo] = issueInfos
                 }
             }
             return (prResults, issueResults)
         }
+    }
 
-        // Update menu immediately with PR list and issues
-        await MainActor.run {
-            menuBarController.updatePullRequests(allPRs)
-            menuBarController.updateIssues(allIssues)
+    /// Fetch PRs and issues for a single repo
+    private func fetchRepoData(
+        repo: String,
+        token: String
+    ) async -> (prs: (String, [PRDisplayInfo])?, issues: (String, [IssueDisplayInfo])?)? {
+        let parts = repo.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        let owner = String(parts[0])
+        let repoName = String(parts[1])
+        let api = GitHubAPI(token: token)
+
+        let prResult: (String, [PRDisplayInfo])? = await fetchPRs(api: api, owner: owner, repoName: repoName, repo: repo)
+        let issueResult: (String, [IssueDisplayInfo])? = await fetchIssues(api: api, owner: owner, repoName: repoName, repo: repo)
+
+        return (prs: prResult, issues: issueResult)
+    }
+
+    private func fetchPRs(api: GitHubAPI, owner: String, repoName: String, repo: String) async -> (String, [PRDisplayInfo])? {
+        do {
+            let prs = try await api.listPRs(owner: owner, repo: repoName)
+            if !prs.isEmpty {
+                return (repo, prs.map { PRDisplayInfo(pr: $0) })
+            }
+        } catch {
+            print("Error fetching PRs for \(repo): \(error)")
         }
+        return nil
+    }
 
-        // Fetch commit messages and check statuses in parallel (fire and forget)
+    private func fetchIssues(api: GitHubAPI, owner: String, repoName: String, repo: String) async -> (String, [IssueDisplayInfo])? {
+        do {
+            let issues = try await api.listIssues(owner: owner, repo: repoName)
+            if !issues.isEmpty {
+                return (repo, issues.map { IssueDisplayInfo(issue: $0) })
+            }
+        } catch {
+            print("Error fetching issues for \(repo): \(error)")
+        }
+        return nil
+    }
+
+    /// Fetch commit messages and check statuses for all PRs
+    private func fetchCommitAndCheckInfo(allPRs: [String: [PRDisplayInfo]]) {
         for (repo, prInfos) in allPRs {
             let parts = repo.split(separator: "/")
-            guard parts.count == 2 else { continue }
+            guard parts.count == 2,
+                  let token = repoTokenMap[repo] else { continue }
             let owner = String(parts[0])
             let repoName = String(parts[1])
-
-            // Get token from our repo -> token map
-            guard let token = repoTokenMap[repo] else { continue }
             let api = GitHubAPI(token: token)
 
             for prInfo in prInfos {
-                // Fetch commit message
-                Task {
-                    do {
-                        if let commit = try await api.getLastCommit(owner: owner, repo: repoName, number: prInfo.pr.number) {
-                            await MainActor.run {
-                                menuBarController.updateCommitMessage(
-                                    forPR: prInfo.pr.number,
-                                    inRepo: repo,
-                                    message: commit.summary
-                                )
-                            }
-                        }
-                    } catch {
-                        print("Error fetching commit for PR #\(prInfo.pr.number): \(error)")
-                    }
-                }
-
-                // Fetch check status
-                Task {
-                    await fetchCheckStatus(for: prInfo.pr, in: repo, owner: owner, repoName: repoName)
-                }
+                Task { await fetchCommitMessage(api: api, owner: owner, repoName: repoName, repo: repo, prInfo: prInfo) }
+                Task { await fetchCheckStatus(for: prInfo.pr, in: repo, owner: owner, repoName: repoName) }
             }
         }
+    }
 
-        // Start or update the check status polling timer
-        await MainActor.run {
-            startCheckStatusPollingIfNeeded()
+    private func fetchCommitMessage(api: GitHubAPI, owner: String, repoName: String, repo: String, prInfo: PRDisplayInfo) async {
+        do {
+            if let commit = try await api.getLastCommit(owner: owner, repo: repoName, number: prInfo.pr.number) {
+                await MainActor.run {
+                    menuBarController.updateCommitMessage(forPR: prInfo.pr.number, inRepo: repo, message: commit.summary)
+                }
+            }
+        } catch {
+            print("Error fetching commit for PR #\(prInfo.pr.number): \(error)")
         }
     }
 
