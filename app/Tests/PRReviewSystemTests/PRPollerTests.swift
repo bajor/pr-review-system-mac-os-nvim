@@ -208,11 +208,11 @@ final class PRPollerBehaviorTests: XCTestCase {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
-        var callCount = 0
+        let callCount = SendableBox(0)
 
         MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
-            callCount += 1
+            callCount.value += 1
             return MockURLProtocol.successResponse(for: request, jsonString: "[]")
         }
 
@@ -223,7 +223,7 @@ final class PRPollerBehaviorTests: XCTestCase {
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should only poll once on start
-        XCTAssertEqual(callCount, 1)
+        XCTAssertEqual(callCount.value, 1)
 
         poller.stopPolling()
     }
@@ -232,18 +232,18 @@ final class PRPollerBehaviorTests: XCTestCase {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
-        var callCount = 0
+        let callCount = SendableBox(0)
 
         MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
-            callCount += 1
+            callCount.value += 1
             return MockURLProtocol.successResponse(for: request, jsonString: "[]")
         }
 
         await poller.pollNow()
         await poller.pollNow()
 
-        XCTAssertEqual(callCount, 2)
+        XCTAssertEqual(callCount.value, 2)
     }
 
     func testPollDetectsNewPRs() async throws {
@@ -271,15 +271,15 @@ final class PRPollerBehaviorTests: XCTestCase {
             MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }
 
-        var detectedChanges: [PRPoller.PRChange] = []
+        let detectedChanges = SendableBox<[PRPoller.PRChange]>([])
         poller.startPolling { changes in
-            detectedChanges = changes
+            detectedChanges.value = changes
         }
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
-        XCTAssertEqual(detectedChanges.count, 1)
-        if let change = detectedChanges.first {
+        XCTAssertEqual(detectedChanges.value.count, 1)
+        if let change = detectedChanges.value.first {
             XCTAssertEqual(change.pr.number, 42)
             if case .newPR = change.changeType {
                 // Expected
@@ -295,11 +295,11 @@ final class PRPollerBehaviorTests: XCTestCase {
         let config = makeConfig()
         let poller = PRPoller(config: config)
 
-        var pollCount = 0
+        let pollCount = SendableBox(0)
         MockURLProtocol.reset()
         MockURLProtocol.requestHandler = { request in
-            pollCount += 1
-            let sha = pollCount == 1 ? "abc123" : "xyz789" // Different SHA on second poll
+            pollCount.value += 1
+            let sha = pollCount.value == 1 ? "abc123" : "xyz789" // Different SHA on second poll
             let prJson = """
             [{
                 "id": 1,
@@ -318,9 +318,9 @@ final class PRPollerBehaviorTests: XCTestCase {
             return MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }
 
-        var allChanges: [[PRPoller.PRChange]] = []
+        let allChanges = SendableBox<[[PRPoller.PRChange]]>([])
         poller.startPolling { changes in
-            allChanges.append(changes)
+            allChanges.value.append(changes)
         }
 
         // Wait for first poll
@@ -332,10 +332,10 @@ final class PRPollerBehaviorTests: XCTestCase {
         try await Task.sleep(nanoseconds: 100_000_000)
 
         // First poll should detect newPR, second should detect newCommits
-        XCTAssertGreaterThanOrEqual(allChanges.count, 2)
-        if allChanges.count >= 2 {
+        XCTAssertGreaterThanOrEqual(allChanges.value.count, 2)
+        if allChanges.value.count >= 2 {
             // Second poll should show new commits
-            let secondPollChanges = allChanges[1]
+            let secondPollChanges = allChanges.value[1]
             if let change = secondPollChanges.first {
                 if case let .newCommits(oldSHA, newSHA) = change.changeType {
                     XCTAssertEqual(oldSHA, "abc123")
@@ -375,15 +375,15 @@ final class PRPollerBehaviorTests: XCTestCase {
             MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }
 
-        var detectedChanges: [PRPoller.PRChange] = []
+        let detectedChanges = SendableBox<[PRPoller.PRChange]>([])
         poller.startPolling { changes in
-            detectedChanges = changes
+            detectedChanges.value = changes
         }
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should be empty because PR author matches username
-        XCTAssertTrue(detectedChanges.isEmpty)
+        XCTAssertTrue(detectedChanges.value.isEmpty)
 
         poller.stopPolling()
     }
@@ -413,15 +413,15 @@ final class PRPollerBehaviorTests: XCTestCase {
             MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }
 
-        var changeCount = 0
+        let changeCount = SendableBox(0)
         poller.startPolling { changes in
-            changeCount += changes.count
+            changeCount.value += changes.count
         }
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should have detected 1 new PR
-        XCTAssertEqual(changeCount, 1)
+        XCTAssertEqual(changeCount.value, 1)
 
         // Clear state
         poller.clearState()
@@ -431,7 +431,7 @@ final class PRPollerBehaviorTests: XCTestCase {
         try await Task.sleep(nanoseconds: 100_000_000)
 
         // Should have detected it again after clear
-        XCTAssertEqual(changeCount, 2)
+        XCTAssertEqual(changeCount.value, 2)
 
         poller.stopPolling()
     }
@@ -466,16 +466,16 @@ final class PRPollerBehaviorTests: XCTestCase {
             }
         }
 
-        var detectedChanges: [PRPoller.PRChange] = []
+        let detectedChanges = SendableBox<[PRPoller.PRChange]>([])
         poller.startPolling { changes in
-            detectedChanges = changes
+            detectedChanges.value = changes
         }
 
         try await Task.sleep(nanoseconds: 300_000_000)
 
         // Should still detect PR from repo2 despite repo1 error
-        XCTAssertEqual(detectedChanges.count, 1)
-        if let change = detectedChanges.first {
+        XCTAssertEqual(detectedChanges.value.count, 1)
+        if let change = detectedChanges.value.first {
             XCTAssertEqual(change.repo, "owner/repo2")
         }
 
@@ -497,15 +497,15 @@ final class PRPollerBehaviorTests: XCTestCase {
             return MockURLProtocol.successResponse(for: request, jsonString: "[]")
         }
 
-        var detectedChanges: [PRPoller.PRChange] = []
+        let detectedChanges = SendableBox<[PRPoller.PRChange]>([])
         poller.startPolling { changes in
-            detectedChanges = changes
+            detectedChanges.value = changes
         }
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should handle gracefully with no changes
-        XCTAssertTrue(detectedChanges.isEmpty)
+        XCTAssertTrue(detectedChanges.value.isEmpty)
 
         poller.stopPolling()
     }
@@ -578,15 +578,15 @@ final class PRPollerEdgeCaseTests: XCTestCase {
             MockURLProtocol.successResponse(for: request, jsonString: "{ not valid json }")
         }
 
-        var detectedChanges: [PRPoller.PRChange] = []
+        let detectedChanges = SendableBox<[PRPoller.PRChange]>([])
         poller.startPolling { changes in
-            detectedChanges = changes
+            detectedChanges.value = changes
         }
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
         // Should handle gracefully with no changes
-        XCTAssertTrue(detectedChanges.isEmpty)
+        XCTAssertTrue(detectedChanges.value.isEmpty)
         XCTAssertTrue(poller.isPolling)
 
         poller.stopPolling()
@@ -618,15 +618,15 @@ final class PRPollerEdgeCaseTests: XCTestCase {
             MockURLProtocol.successResponse(for: request, jsonString: prJson)
         }
 
-        var detectedChanges: [PRPoller.PRChange] = []
+        let detectedChanges = SendableBox<[PRPoller.PRChange]>([])
         poller.startPolling { changes in
-            detectedChanges = changes
+            detectedChanges.value = changes
         }
 
         try await Task.sleep(nanoseconds: 200_000_000)
 
-        XCTAssertEqual(detectedChanges.count, 1)
-        XCTAssertEqual(detectedChanges.first?.pr.title, longTitle)
+        XCTAssertEqual(detectedChanges.value.count, 1)
+        XCTAssertEqual(detectedChanges.value.first?.pr.title, longTitle)
 
         poller.stopPolling()
     }

@@ -227,10 +227,10 @@ final class GitHubAPIBehaviorTests: XCTestCase {
     }
 
     func testListPRsPagination() async throws {
-        var requestCount = 0
+        let requestCount = SendableBox(0)
         MockURLProtocol.requestHandler = { request in
-            requestCount += 1
-            if requestCount == 1 {
+            requestCount.value += 1
+            if requestCount.value == 1 {
                 // First page with Link header
                 return MockURLProtocol.successResponse(
                     for: request,
@@ -250,7 +250,7 @@ final class GitHubAPIBehaviorTests: XCTestCase {
         let api = GitHubAPI(token: "test-token", session: session)
         let prs = try await api.listPRs(owner: "owner", repo: "repo")
 
-        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(requestCount.value, 2)
         XCTAssertEqual(prs.count, 2)
         XCTAssertEqual(prs[0].number, 1)
         XCTAssertEqual(prs[1].number, 2)
@@ -593,9 +593,9 @@ final class GitHubAPIErrorHandlingTests: XCTestCase {
     }
 
     func testAuthorizationHeader() async throws {
-        var capturedRequest: URLRequest?
+        let capturedRequest = SendableBox<URLRequest?>(nil)
         MockURLProtocol.requestHandler = { request in
-            capturedRequest = request
+            capturedRequest.value = request
             return MockURLProtocol.successResponse(for: request, jsonString: MockResponses.emptyList)
         }
 
@@ -603,7 +603,7 @@ final class GitHubAPIErrorHandlingTests: XCTestCase {
         let api = GitHubAPI(token: "my-secret-token", session: session)
         _ = try await api.listPRs(owner: "owner", repo: "repo")
 
-        XCTAssertEqual(capturedRequest?.value(forHTTPHeaderField: "Authorization"), "Bearer my-secret-token")
-        XCTAssertEqual(capturedRequest?.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
+        XCTAssertEqual(capturedRequest.value?.value(forHTTPHeaderField: "Authorization"), "Bearer my-secret-token")
+        XCTAssertEqual(capturedRequest.value?.value(forHTTPHeaderField: "Accept"), "application/vnd.github+json")
     }
 }
