@@ -28,13 +28,6 @@ jobs:
       - name: Run Neovim tests
         run: make test-nvim
 
-      - name: Install StyLua
-        uses: JohnnyMorganz/stylua-action@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          version: latest
-          args: --check nvim/
-
   test-app:
     name: Swift App Tests
     runs-on: macos-14

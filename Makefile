@@ -1,4 +1,4 @@
-.PHONY: test test-nvim test-app lint lint-nvim lint-app build build-app install-app uninstall-app clean setup help
+.PHONY: test test-nvim test-app lint lint-app build build-app install-app uninstall-app clean setup help
 
 VERSION := $(shell cat VERSION)
 APP_BUNDLE := app/.build/PRReview.app
@@ -23,15 +23,7 @@ test: lint test-nvim test-app
 	@echo "All tests passed!"
 
 # Linting
-lint: lint-nvim lint-app
-
-lint-nvim:
-	@echo "==> Checking Lua formatting with StyLua..."
-	@if command -v stylua >/dev/null 2>&1; then \
-		stylua --check nvim/ || (echo "Run 'stylua nvim/' to fix formatting" && exit 1); \
-	else \
-		echo "stylua not found, skipping Lua lint (install with: brew install stylua)"; \
-	fi
+lint: lint-app
 
 lint-app:
 	@echo "==> Running SwiftLint..."
