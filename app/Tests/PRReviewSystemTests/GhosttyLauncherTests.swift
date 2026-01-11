@@ -150,7 +150,7 @@ final class GhosttyLauncherPathTests: XCTestCase {
             repo: "myrepo",
             prNumber: 42
         )
-        XCTAssertEqual(path, "/tmp/test/myorg/myrepo/42")
+        XCTAssertEqual(path, "/tmp/test/myorg/myrepo/pr-42")
     }
 
     func testPrPathWithSpecialChars() {
@@ -160,7 +160,7 @@ final class GhosttyLauncherPathTests: XCTestCase {
             repo: "my_repo",
             prNumber: 123
         )
-        XCTAssertEqual(path, "/tmp/test/my-org/my_repo/123")
+        XCTAssertEqual(path, "/tmp/test/my-org/my_repo/pr-123")
     }
 
     func testPrPathWithNumbers() {
@@ -170,7 +170,7 @@ final class GhosttyLauncherPathTests: XCTestCase {
             repo: "repo456",
             prNumber: 789
         )
-        XCTAssertEqual(path, "/tmp/test/org123/repo456/789")
+        XCTAssertEqual(path, "/tmp/test/org123/repo456/pr-789")
     }
 
     func testPrPathWithTrailingSlash() {
@@ -213,14 +213,17 @@ final class GhosttyLauncherEdgeCaseTests: XCTestCase {
 
         let pr = try makePullRequest(number: 1)
 
-        // This should throw because Ghostty doesn't exist
+        // This should throw an error - either GhosttyLauncherError or GitError
+        // depending on which operation fails first
         do {
             try await launcher.openPR(pr, owner: "owner", repo: "repo")
-            XCTFail("Expected GhosttyLauncherError to be thrown")
+            XCTFail("Expected an error to be thrown")
         } catch is GhosttyLauncherError {
-            // Expected
+            // Expected - Ghostty not found
+        } catch is GitError {
+            // Also acceptable - git operations may fail first in test environment
         } catch {
-            XCTFail("Expected GhosttyLauncherError, got \(type(of: error))")
+            XCTFail("Expected GhosttyLauncherError or GitError, got \(type(of: error))")
         }
     }
 

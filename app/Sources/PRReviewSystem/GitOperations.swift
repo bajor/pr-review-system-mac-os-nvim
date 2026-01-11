@@ -94,7 +94,8 @@ enum GitOperations {
     ///   - prNumber: PR number
     /// - Returns: Full path for the PR clone
     static func buildPRPath(cloneRoot: String, owner: String, repo: String, prNumber: Int) -> String {
-        "\(cloneRoot)/\(owner)/\(repo)/pr-\(prNumber)"
+        let root = cloneRoot.hasSuffix("/") ? String(cloneRoot.dropLast()) : cloneRoot
+        return "\(root)/\(owner)/\(repo)/pr-\(prNumber)"
     }
 
     // MARK: - Private Helpers

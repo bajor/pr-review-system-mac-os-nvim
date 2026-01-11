@@ -242,7 +242,8 @@ enum MockResponses {
     static let combinedStatusEmpty = """
     {
         "state": "pending",
-        "statuses": []
+        "statuses": [],
+        "total_count": 0
     }
     """
 

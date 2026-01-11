@@ -167,11 +167,14 @@ public final class PRPoller: @unchecked Sendable {
     /// Start polling for PR updates
     /// - Parameter onChanges: Callback invoked when changes are detected
     public func startPolling(onChanges: @escaping ChangeHandler) {
-        stateQueue.sync {
-            guard !isPolling else { return }
+        let shouldStart = stateQueue.sync { () -> Bool in
+            guard !isPolling else { return false }
             self.onChanges = onChanges
             isPolling = true
+            return true
         }
+
+        guard shouldStart else { return }
 
         // Schedule timer on main run loop
         DispatchQueue.main.async { [weak self] in
