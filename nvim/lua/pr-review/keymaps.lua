@@ -127,8 +127,10 @@ local function goto_point(point)
     end
   end
 
-  -- Go to line
-  vim.api.nvim_win_set_cursor(0, { point.line, 0 })
+  -- Go to line (clamped to valid range to prevent "cursor position outside buffer" errors)
+  local line_count = vim.api.nvim_buf_line_count(0)
+  local target_line = math.max(1, math.min(point.line, line_count))
+  vim.api.nvim_win_set_cursor(0, { target_line, 0 })
   vim.cmd("normal! zz")
 
   -- Show what we landed on
